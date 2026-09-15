@@ -27,6 +27,9 @@ Config env vars:
   TOP_N               (default 3)                - max simultaneous positions
   WATCHLIST           (optional csv)             - if set, disables rotation
   TRACK_RECORD_FILE   (default track_record.csv)
+  MAX_PORTFOLIO_VALUE (default 100000)         - hard cap: total capital deployed, USD
+  MAX_TRADE_VALUE     (default 50000)          - max notional per single order, USD
+  MIN_CASH_PCT        (default 0.05)           - cash buffer never traded, fraction
 """
 
 import csv
@@ -74,6 +77,11 @@ TOP_N = int(os.environ.get("TOP_N", "3"))
 FIXED_WATCHLIST = [t.strip().upper() for t in os.environ.get(
     "WATCHLIST", "").split(",") if t.strip()]
 TRACK_RECORD_FILE = os.environ.get("TRACK_RECORD_FILE", "track_record.csv")
+
+# ---- Trading limits (plan to trade with less than $100,000) ----
+MAX_PORTFOLIO_VALUE = float(os.environ.get("MAX_PORTFOLIO_VALUE", "100000"))
+MAX_TRADE_VALUE = float(os.environ.get("MAX_TRADE_VALUE", "50000"))
+MIN_CASH_PCT = float(os.environ.get("MIN_CASH_PCT", "0.05"))
 POLYGON_MIN_INTERVAL = 12.2  # free tier: 5 requests/min
 _last_polygon_call = [0.0]
 
@@ -205,6 +213,8 @@ def main():
     universe, universe_desc = current_universe()
     print(f"Mode: {'DRY-RUN (no Alpaca keys)' if dry_run else 'LIVE PAPER TRADING'}")
     print(f"Universe: {universe_desc} | scanning {len(universe)} tickers | top {TOP_N}")
+    print(f"Limits: max portfolio ${MAX_PORTFOLIO_VALUE:,.0f} | "
+          f"max per trade ${MAX_TRADE_VALUE:,.0f} | cash buffer {MIN_CASH_PCT:.0%}")
 
     held = {}
     equity = 0.0
@@ -246,7 +256,14 @@ def main():
                     actions.append(f"SELL {qty} {sym} FAILED: {e}")
 
         # 2) Buy new picks, equal weight across TOP_N slots
-        budget = equity * 0.95 / TOP_N
+        # Trading plan limits: never deploy more than MAX_PORTFOLIO_VALUE,
+        # always keep MIN_CASH_PCT in cash, cap each order at MAX_TRADE_VALUE.
+        deployable = min(equity, MAX_PORTFOLIO_VALUE)
+        if equity > MAX_PORTFOLIO_VALUE:
+            actions.append(f"LIMIT: equity ${equity:,.2f} exceeds cap "
+                           f"${MAX_PORTFOLIO_VALUE:,.2f} - deploying "
+                           f"${deployable:,.2f} only")
+        budget = min(deployable * (1 - MIN_CASH_PCT) / TOP_N, MAX_TRADE_VALUE)
         for pick in picks:
             sym = pick["symbol"]
             if sym in held:
