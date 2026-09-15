@@ -29,7 +29,7 @@ beyond `TOLERANCE_PCT` (default 1%) - catches bad data before it poisons
 training. Includes an LLM trustworthiness verdict. Latest run: all three
 providers agreed to 0.000% deviation on IBM (249.09).
 
-## 4. `paper_trading.py` - Paper trading (Alpaca)
+## 4. `paper_trading.py` - Paper trading (Alpaca) - LIVE
 
 Generates a daily signal from the trained model and acts on it via Alpaca's
 **paper** API (`https://paper-api.alpaca.markets` - fake money, real market):
@@ -37,12 +37,9 @@ Generates a daily signal from the trained model and acts on it via Alpaca's
 - Signal UP -> hold `POSITION_QTY` shares (buy if flat)
 - Signal DOWN -> go flat (sell any position)
 
-**Dry-run by default:** without `ALPACA_API_KEY` / `ALPACA_SECRET_KEY` it
-prints the intended order and submits nothing. Add the two Alpaca paper keys
-as repo secrets to activate real paper orders. Free paper account:
-https://alpaca.markets
-
-Latest dry-run (IBM): signal FLAT (P(up)=0.47).
+Status: **LIVE on a paper account** ($100k paper equity). First live signal
+(IBM, 2026-09-14): FLAT (P(up)=0.47) -> HOLD, no order placed. Without Alpaca
+keys the script runs in dry-run mode (prints intended order, submits nothing).
 
 ## API key setup (important)
 
@@ -69,4 +66,4 @@ python paper_trading.py
 ## CI
 
 Runs on every push **and** weekdays at 22:00 UTC (after US market close):
-Iris training -> cross-check -> stock model -> paper trade signal.
+Iris training -> cross-check -> stock model -> live paper trade signal.
