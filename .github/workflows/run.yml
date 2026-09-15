@@ -10,6 +10,7 @@ on:
 jobs:
   train:
     runs-on: ubuntu-latest
+    timeout-minutes: 25
     steps:
       - uses: actions/checkout@v4
 
@@ -46,6 +47,6 @@ jobs:
           POLYGON_API_KEY: ${{ secrets.POLYGON_API_KEY }}
           ALPACA_API_KEY: ${{ secrets.ALPACA_API_KEY }}
           ALPACA_SECRET_KEY: ${{ secrets.ALPACA_SECRET_KEY }}
-          WATCHLIST: "AAPL,MSFT,NVDA,GOOGL,AMZN,META,TSLA,AMD,JPM,V,XOM,UNH"
+          WATCHLIST: "AAPL,MSFT,NVDA,GOOGL,AMZN,META,TSLA,AMD,AVGO,NFLX,JPM,V,MA,BAC,UNH,JNJ,LLY,PFE,XOM,CVX,WMT,COST,HD,MCD,KO,NKE,CAT,DIS,SPY,QQQ"
           TOP_N: "3"
         run: python paper_trading.py

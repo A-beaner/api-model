@@ -29,15 +29,19 @@ training. Latest run: all three providers agreed to 0.000% deviation.
 
 Autonomous portfolio bot running on the Alpaca **paper** account:
 
-- Scans `WATCHLIST` (default 12 tickers: AAPL MSFT NVDA GOOGL AMZN META TSLA
-  AMD JPM V XOM UNH)
+- Scans `WATCHLIST` - **30 tickers** across tech, finance, health, energy,
+  consumer, industrials + SPY/QQQ ETFs:
+  AAPL MSFT NVDA GOOGL AMZN META TSLA AMD AVGO NFLX JPM V MA BAC UNH JNJ LLY
+  PFE XOM CVX WMT COST HD MCD KO NKE CAT DIS SPY QQQ
 - Trains a direction model per ticker on **2 years of Polygon daily bars**
-  (Alpha Vantage fallback), respecting the 5 req/min free limit
+  (Alpha Vantage fallback), paced to the 5 req/min free tier
 - **Picks tickers itself:** ranks by P(up), holds the `TOP_N` (default 3)
   with P(up) > 0.5, equal-weight across slots
 - **Changes tickers itself:** sells holdings that fall out of the picks,
   buys new picks; goes to cash if all signals are down
 - Dry-run mode if Alpaca keys are unset
+- Daily run takes ~8.5 min (Polygon pacing); edit `WATCHLIST` / `TOP_N`
+  to reshape the universe
 
 First live run: picked NVDA (P=0.69) and META (P=0.67), bought 225 NVDA +
 71 META (~$95k of $100k paper equity) on the Alpaca paper account.

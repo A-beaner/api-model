@@ -13,7 +13,7 @@ Keys come from environment variables - NEVER hardcode secrets:
   ALPACA_API_KEY      (Alpaca paper key id)      -> dry-run if unset
   ALPACA_SECRET_KEY   (Alpaca paper secret)      -> dry-run if unset
   API_KEY             (NVIDIA - optional AI commentary)
-Config env vars: WATCHLIST (csv), TOP_N (default 3).
+Config env vars: WATCHLIST (csv, default 30 tickers), TOP_N (default 3).
 """
 
 import json
@@ -39,7 +39,10 @@ NVIDIA_API_URL = "https://integrate.api.nvidia.com/v1/chat/completions"
 LLM_MODEL = "openai/gpt-oss-20b"
 
 WATCHLIST = [t.strip().upper() for t in os.environ.get(
-    "WATCHLIST", "AAPL,MSFT,NVDA,GOOGL,AMZN,META,TSLA,AMD,JPM,V,XOM,UNH").split(",") if t.strip()]
+    "WATCHLIST",
+    "AAPL,MSFT,NVDA,GOOGL,AMZN,META,TSLA,AMD,AVGO,NFLX,"
+    "JPM,V,MA,BAC,UNH,JNJ,LLY,PFE,XOM,CVX,"
+    "WMT,COST,HD,MCD,KO,NKE,CAT,DIS,SPY,QQQ").split(",") if t.strip()]
 TOP_N = int(os.environ.get("TOP_N", "3"))
 POLYGON_MIN_INTERVAL = 12.2  # free tier: 5 requests/min
 _last_polygon_call = [0.0]
@@ -142,7 +145,7 @@ def main():
     dry_run = not (alpaca_key and alpaca_secret)
 
     print(f"Mode: {'DRY-RUN (no Alpaca keys)' if dry_run else 'LIVE PAPER TRADING'}")
-    print(f"Watchlist: {', '.join(WATCHLIST)} | Picks: top {TOP_N} with P(up)>0.5\n")
+    print(f"Watchlist: {len(WATCHLIST)} tickers | Picks: top {TOP_N} with P(up)>0.5\n")
 
     rows = scan(WATCHLIST, poly_key, av_key)
     if not rows:
