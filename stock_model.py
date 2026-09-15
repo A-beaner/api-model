@@ -28,6 +28,7 @@ ALPHA_VANTAGE_URL = "https://www.alphavantage.co/query"
 NVIDIA_API_URL = "https://integrate.api.nvidia.com/v1/chat/completions"
 LLM_MODEL = "openai/gpt-oss-20b"
 SYMBOL = os.environ.get("SYMBOL", "IBM")
+FEATURES = ["return_1d", "return_5d", "sma_ratio_5_20", "volatility_10", "volume_change", "rsi_14"]
 
 
 def fetch_daily(symbol, api_key):
@@ -46,6 +47,8 @@ def fetch_daily(symbol, api_key):
 
 
 def engineer_features(df):
+    """Compute technical features. The final row has target=NaN (tomorrow unknown)
+    and is kept for live prediction; callers training a model must dropna on target."""
     out = df.copy()
     out["return_1d"] = out["close"].pct_change()
     out["return_5d"] = out["close"].pct_change(5)
@@ -57,9 +60,18 @@ def engineer_features(df):
     gain = delta.clip(lower=0).rolling(14).mean()
     loss = (-delta.clip(upper=0)).rolling(14).mean()
     out["rsi_14"] = 100 - (100 / (1 + gain / loss))
-    # Target: 1 if tomorrow closes higher than today
-    out["target"] = (out["close"].shift(-1) > out["close"]).astype(int)
-    return out.dropna()
+    # Target: 1 if tomorrow closes higher than today (NaN for the latest day)
+    next_close = out["close"].shift(-1)
+    out["target"] = (next_close > out["close"]).where(next_close.notna()).astype("float")
+    return out.dropna(subset=FEATURES)
+
+
+def train_model(data):
+    train = data.dropna(subset=["target"])
+    X, y = train[FEATURES], train["target"]
+    model = RandomForestClassifier(n_estimators=200, max_depth=5, random_state=42)
+    model.fit(X, y)
+    return model, train
 
 
 def llm_analysis(summary, api_key):
@@ -71,7 +83,7 @@ def llm_analysis(summary, api_key):
     payload = json.dumps({
         "model": LLM_MODEL,
         "messages": [{"role": "user", "content": prompt}],
-        "max_tokens": 256,
+        "max_tokens": 600,
         "temperature": 0.3,
     }).encode()
     req = urllib.request.Request(NVIDIA_API_URL, data=payload, headers={
@@ -80,7 +92,8 @@ def llm_analysis(summary, api_key):
         "Accept": "application/json",
     })
     with urllib.request.urlopen(req, timeout=60) as r:
-        return json.loads(r.read())["choices"][0]["message"]["content"]
+        msg = json.loads(r.read())["choices"][0]["message"]
+    return (msg.get("content") or "").strip() or "(model returned empty content)"
 
 
 def main():
@@ -96,11 +109,11 @@ def main():
     print(f"{len(df)} trading days: {df.index.min().date()} -> {df.index.max().date()}")
 
     data = engineer_features(df)
-    features = ["return_1d", "return_5d", "sma_ratio_5_20", "volatility_10", "volume_change", "rsi_14"]
-    X, y = data[features], data["target"]
+    train = data.dropna(subset=["target"])
+    X, y = train[FEATURES], train["target"]
 
     # Time-based split - no shuffling for time series
-    split = int(len(data) * 0.8)
+    split = int(len(train) * 0.8)
     X_train, X_test = X.iloc[:split], X.iloc[split:]
     y_train, y_test = y.iloc[:split], y.iloc[split:]
     print(f"Train: {len(X_train)} days | Test: {len(X_test)} days")
@@ -115,7 +128,7 @@ def main():
     print(classification_report(y_test, preds, target_names=["down", "up"], zero_division=0))
 
     # Simple long-only backtest on the test window
-    test_returns = data["return_1d"].iloc[split:].shift(-1).dropna()  # next-day returns
+    test_returns = train["return_1d"].iloc[split:].shift(-1).dropna()
     strat = (preds[:len(test_returns)] == 1) * test_returns.values
     strat_cum = (1 + pd.Series(strat)).prod() - 1
     bh_cum = (1 + test_returns).prod() - 1
@@ -125,7 +138,7 @@ def main():
     print("Model saved to stock_model.joblib")
 
     if nvidia_key:
-        summary = (f"Symbol {SYMBOL}, {len(data)} usable days. Accuracy {acc:.2%} vs baseline "
+        summary = (f"Symbol {SYMBOL}, {len(train)} usable days. Accuracy {acc:.2%} vs baseline "
                    f"{baseline:.2%}. Strategy backtest {strat_cum:+.2%} vs buy-hold {bh_cum:+.2%}.")
         print(f"\n--- LLM analysis ({LLM_MODEL} via NVIDIA API) ---")
         try:
