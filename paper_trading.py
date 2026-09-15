@@ -27,6 +27,7 @@ Config env vars:
   TOP_N               (default 3)                - max simultaneous positions
   WATCHLIST           (optional csv)             - if set, disables rotation
   TRACK_RECORD_FILE   (default track_record.csv)
+  DAILY_TRADE_LIMIT_USD (default 50000)           - max new $ bought per run/day
 """
 
 import csv
@@ -71,6 +72,7 @@ TICKER_POOL = [t.strip().upper() for t in os.environ.get(
 WINDOW_SIZE = int(os.environ.get("WINDOW_SIZE", "30"))
 ROTATE_EVERY_DAYS = int(os.environ.get("ROTATE_EVERY_DAYS", "7"))
 TOP_N = int(os.environ.get("TOP_N", "3"))
+DAILY_TRADE_LIMIT_USD = float(os.environ.get("DAILY_TRADE_LIMIT_USD", "50000"))  # max $ of new buys per run/day
 FIXED_WATCHLIST = [t.strip().upper() for t in os.environ.get(
     "WATCHLIST", "").split(",") if t.strip()]
 TRACK_RECORD_FILE = os.environ.get("TRACK_RECORD_FILE", "track_record.csv")
@@ -246,7 +248,9 @@ def main():
                     actions.append(f"SELL {qty} {sym} FAILED: {e}")
 
         # 2) Buy new picks, equal weight across TOP_N slots
-        budget = equity * 0.95 / TOP_N
+        daily_budget = min(equity * 0.95, DAILY_TRADE_LIMIT_USD)
+        budget = daily_budget / TOP_N
+        print(f"Daily trade limit: ${DAILY_TRADE_LIMIT_USD:,.0f} -> slot budget ${budget:,.2f}")
         for pick in picks:
             sym = pick["symbol"]
             if sym in held:
