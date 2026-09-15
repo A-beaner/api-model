@@ -1,2 +1,3 @@
 date_utc,mode,universe,scanned,picks,actions,holdings,equity
 2026-09-15 05:10,paper,"rotating window (pool=168, period=2958)",30,GS:0.74|NOW:0.67|MA:0.65,BUY 32 GS FAILED: HTTP Error 403: Forbidden|BUY 222 NOW FAILED: HTTP Error 403: Forbidden|BUY 55 MA FAILED: HTTP Error 403: Forbidden,,100000.00
+2026-09-15 15:39,paper,"rotating window (pool=168, period=2958)",30,GS:0.74|NOW:0.67|MA:0.65,"BUY 16 GS (~$15,815) -> pending_new|BUY 117 NOW (~$16,655) -> pending_new|BUY 29 MA (~$16,658) -> pending_new",,100459.20
