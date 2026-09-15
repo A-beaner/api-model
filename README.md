@@ -1,37 +1,49 @@
 # api-model
 
-An ML training pipeline powered by an NVIDIA API key:
+ML pipelines powered by API keys stored as encrypted secrets (never in code):
 
-1. Trains a RandomForest classifier on the Iris dataset
-2. Evaluates it (accuracy + classification report) and saves `model.joblib`
-3. Sends the results to an NVIDIA-hosted LLM (`openai/gpt-oss-20b` via
-   `integrate.api.nvidia.com`) which writes a natural-language analysis
+## 1. `train_model.py` - Iris classifier + LLM analysis
+
+Trains a RandomForest on the Iris dataset (0.90 test accuracy), then sends the
+results to an NVIDIA-hosted LLM (`openai/gpt-oss-20b`) for natural-language
+analysis. Uses the `API_KEY` (NVIDIA) env var.
+
+## 2. `stock_model.py` - Stock trading model
+
+Fetches daily OHLCV data from Alpha Vantage, engineers technical features
+(returns, SMA ratios, volatility, RSI-14, volume), and trains a RandomForest
+to predict next-day price direction. Includes a long-only backtest vs
+buy-and-hold and an optional LLM interpretation. Uses `STOCK_API_KEY`
+(Alpha Vantage) and `API_KEY` (NVIDIA) env vars. Set `SYMBOL` to change the
+ticker (default: IBM).
+
+Latest local run (IBM): 58.8% direction accuracy vs 52.9% baseline;
+backtest +8.73% vs +6.59% buy-and-hold. Small sample (100-day free feed) -
+not financial advice.
 
 ## API key setup (important)
 
-Your NVIDIA API key is **never** stored in this repo. It's loaded from the
-`API_KEY` environment variable:
+Keys are **never** stored in this repo. Locally:
 
 ```bash
-cp .env.example .env   # then paste your real key into .env (gitignored)
+cp .env.example .env   # paste your keys into .env (gitignored)
 # or:
 export API_KEY="nvapi-..."
+export STOCK_API_KEY="your-alpha-vantage-key"
 ```
 
-For CI, the key is stored as an encrypted GitHub Actions secret named
-`API_KEY` (Settings -> Secrets and variables -> Actions). The workflow
-injects it automatically - the key never appears in code or logs.
+For CI, both are stored as encrypted GitHub Actions secrets (`API_KEY`,
+`STOCK_API_KEY`) - the workflow injects them automatically.
 
 ## Run locally
 
 ```bash
 pip install -r requirements.txt
 python train_model.py
+python stock_model.py
 ```
 
 ## CI
 
-Every push triggers `.github/workflows/run.yml`, which installs dependencies
-and runs the full pipeline (training + LLM analysis) using the `API_KEY`
-secret. Latest verified result: **0.90 test accuracy** on the Iris hold-out
-set, with LLM analysis generated via the NVIDIA API.
+Every push triggers `.github/workflows/run.yml`, which runs both pipelines
+using the repo secrets.

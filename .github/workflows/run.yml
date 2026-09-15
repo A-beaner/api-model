@@ -18,7 +18,13 @@ jobs:
       - name: Install dependencies
         run: pip install -r requirements.txt
 
-      - name: Train model
+      - name: Train Iris model
         env:
           API_KEY: ${{ secrets.API_KEY }}
         run: python train_model.py
+
+      - name: Train stock trading model
+        env:
+          API_KEY: ${{ secrets.API_KEY }}
+          STOCK_API_KEY: ${{ secrets.STOCK_API_KEY }}
+        run: python stock_model.py
