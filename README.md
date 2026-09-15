@@ -14,37 +14,35 @@ analysis. Uses the `API_KEY` (NVIDIA) env var.
 Fetches daily OHLCV data from Alpha Vantage, engineers technical features
 (returns, SMA ratios, volatility, RSI-14, volume), and trains a RandomForest
 to predict next-day price direction. Includes a long-only backtest vs
-buy-and-hold and an optional LLM interpretation. Latest local run (IBM):
-62.5% direction accuracy vs 56.3% baseline; backtest +6.20% vs +4.11%
-buy-and-hold. Small sample - not financial advice.
+buy-and-hold. Latest local run (IBM): 62.5% direction accuracy vs 56.3%
+baseline; backtest +6.20% vs +4.11% buy-and-hold. Not financial advice.
 
 ## 3. `cross_check.py` - Data feed cross-validation
 
-Fetches the latest close for `SYMBOL` from **Alpha Vantage**, **Polygon.io**,
-and **Finnhub**, and compares them. Exits non-zero if any provider diverges
-beyond `TOLERANCE_PCT` (default 1%) - catches bad data before it poisons
-training. Latest run: all three providers agreed to 0.000% deviation.
+Compares the latest close for `SYMBOL` from **Alpha Vantage**, **Polygon.io**,
+and **Finnhub**; exits non-zero if any provider diverges beyond
+`TOLERANCE_PCT` (default 1%). Latest run: 0.000% deviation.
 
-## 4. `paper_trading.py` - Multi-ticker portfolio bot (Alpaca paper) - LIVE
+## 4. `paper_trading.py` - Portfolio bot with ROTATING universe - LIVE
 
-Autonomous portfolio bot running on the Alpaca **paper** account:
+Autonomous bot on the Alpaca **paper** account ($100k paper equity):
 
-- Scans `WATCHLIST` - **30 tickers** across tech, finance, health, energy,
-  consumer, industrials + SPY/QQQ ETFs:
-  AAPL MSFT NVDA GOOGL AMZN META TSLA AMD AVGO NFLX JPM V MA BAC UNH JNJ LLY
-  PFE XOM CVX WMT COST HD MCD KO NKE CAT DIS SPY QQQ
+- **Rotating universe:** a pool of **60 tickers** (tech, finance, health,
+  energy, consumer, industrial + SPY/QQQ). Each run scans a window of
+  `WINDOW_SIZE` (30) tickers; the window shifts every `ROTATE_EVERY_DAYS`
+  (7) days, so after each week's after-close runs the bot evaluates a fresh
+  slice of the market. The whole pool is covered over a 6-week cycle.
+- **Holdings are always scanned** regardless of the window - a position is
+  only sold when its own signal turns down, never just because it rotated
+  out of view.
 - Trains a direction model per ticker on **2 years of Polygon daily bars**
-  (Alpha Vantage fallback), paced to the 5 req/min free tier
-- **Picks tickers itself:** ranks by P(up), holds the `TOP_N` (default 3)
-  with P(up) > 0.5, equal-weight across slots
-- **Changes tickers itself:** sells holdings that fall out of the picks,
-  buys new picks; goes to cash if all signals are down
-- Dry-run mode if Alpaca keys are unset
-- Daily run takes ~8.5 min (Polygon pacing); edit `WATCHLIST` / `TOP_N`
-  to reshape the universe
+  (Alpha Vantage fallback), paced to the 5 req/min free tier.
+- **Picks tickers itself:** ranks by P(up), holds the `TOP_N` (3) with
+  P(up) > 0.5, equal-weight; **changes tickers itself** each rebalance.
+- Set `WATCHLIST` to disable rotation and pin a fixed universe.
+- Daily run ~8.5 min. Dry-run mode if Alpaca keys unset.
 
-First live run: picked NVDA (P=0.69) and META (P=0.67), bought 225 NVDA +
-71 META (~$95k of $100k paper equity) on the Alpaca paper account.
+First live runs: bought NVDA + META, then NVDA + AAPL (~$95k deployed).
 
 ## API key setup (important)
 

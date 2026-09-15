@@ -40,13 +40,14 @@ jobs:
           STOCK_API_KEY: ${{ secrets.STOCK_API_KEY }}
         run: python stock_model.py
 
-      - name: Paper trade portfolio (live on Alpaca paper)
+      - name: Paper trade portfolio (live on Alpaca paper, rotating universe)
         env:
           API_KEY: ${{ secrets.API_KEY }}
           STOCK_API_KEY: ${{ secrets.STOCK_API_KEY }}
           POLYGON_API_KEY: ${{ secrets.POLYGON_API_KEY }}
           ALPACA_API_KEY: ${{ secrets.ALPACA_API_KEY }}
           ALPACA_SECRET_KEY: ${{ secrets.ALPACA_SECRET_KEY }}
-          WATCHLIST: "AAPL,MSFT,NVDA,GOOGL,AMZN,META,TSLA,AMD,AVGO,NFLX,JPM,V,MA,BAC,UNH,JNJ,LLY,PFE,XOM,CVX,WMT,COST,HD,MCD,KO,NKE,CAT,DIS,SPY,QQQ"
+          WINDOW_SIZE: "30"
+          ROTATE_EVERY_DAYS: "7"
           TOP_N: "3"
         run: python paper_trading.py
