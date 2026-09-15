@@ -39,10 +39,13 @@ jobs:
           STOCK_API_KEY: ${{ secrets.STOCK_API_KEY }}
         run: python stock_model.py
 
-      - name: Paper trade (dry-run until ALPACA secrets are set)
+      - name: Paper trade portfolio (live on Alpaca paper)
         env:
           API_KEY: ${{ secrets.API_KEY }}
           STOCK_API_KEY: ${{ secrets.STOCK_API_KEY }}
+          POLYGON_API_KEY: ${{ secrets.POLYGON_API_KEY }}
           ALPACA_API_KEY: ${{ secrets.ALPACA_API_KEY }}
           ALPACA_SECRET_KEY: ${{ secrets.ALPACA_SECRET_KEY }}
+          WATCHLIST: "AAPL,MSFT,NVDA,GOOGL,AMZN,META,TSLA,AMD,JPM,V,XOM,UNH"
+          TOP_N: "3"
         run: python paper_trading.py
