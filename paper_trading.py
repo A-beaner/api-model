@@ -1,31 +1,35 @@
 """
 paper_trading.py - Multi-ticker paper trading bot (Alpaca paper API) with a
-ROTATING ticker universe.
+ROTATING ticker universe and a persistent track record.
 
-Each run picks a window of WINDOW_SIZE tickers from TICKER_POOL (default 60
+Each run picks a window of WINDOW_SIZE tickers from TICKER_POOL (default 168
 liquid US names + ETFs). The window rotates every ROTATE_EVERY_DAYS days
-(default 7), so the bot regularly evaluates fresh tickers after market close.
-Currently-held positions are ALWAYS scanned too, so a holding is only sold
-when its own signal turns down - never just because it rotated out of view.
+(default 7), so the bot regularly evaluates fresh tickers after market close
+and covers the whole pool over ~17 weeks. Currently-held positions are ALWAYS
+scanned too, so a holding is only sold when its own signal turns down - never
+just because it rotated out of view.
 
-Per run: train a direction model per ticker (Polygon 2y daily bars; Alpha
-Vantage fallback), rank by P(up), hold the TOP_N with P(up) > 0.5,
-equal-weight. Sells holdings that fall out of the picks, buys new picks.
+Per run: train a direction model per ticker (Polygon 2y daily bars), rank by
+P(up), hold the TOP_N with P(up) > 0.5, equal-weight. Sells holdings that
+fall out of the picks, buys new picks. Appends every run to track_record.csv
+(committed back to the repo by CI) for a full audit trail.
 
+Market data: Polygon only (this step no longer touches Alpha Vantage).
 Keys come from environment variables - NEVER hardcode secrets:
-  POLYGON_API_KEY     (Polygon.io - primary market data, 2y daily bars)
-  STOCK_API_KEY       (Alpha Vantage - fallback market data)
+  POLYGON_API_KEY     (Polygon.io - market data, 2y daily bars)
   ALPACA_API_KEY      (Alpaca paper key id)      -> dry-run if unset
   ALPACA_SECRET_KEY   (Alpaca paper secret)      -> dry-run if unset
   API_KEY             (NVIDIA - optional AI commentary)
 Config env vars:
-  TICKER_POOL         (csv, default 60 tickers) - the rotating universe pool
-  WINDOW_SIZE         (default 30)              - tickers scanned per run
-  ROTATE_EVERY_DAYS   (default 7)               - how often the window shifts
-  TOP_N               (default 3)               - max simultaneous positions
-  WATCHLIST           (optional csv)            - if set, disables rotation
+  TICKER_POOL         (csv, default 168 tickers) - the rotating universe pool
+  WINDOW_SIZE         (default 30)               - tickers scanned per run
+  ROTATE_EVERY_DAYS   (default 7)                - how often the window shifts
+  TOP_N               (default 3)                - max simultaneous positions
+  WATCHLIST           (optional csv)             - if set, disables rotation
+  TRACK_RECORD_FILE   (default track_record.csv)
 """
 
+import csv
 import json
 import os
 import time
@@ -49,12 +53,18 @@ NVIDIA_API_URL = "https://integrate.api.nvidia.com/v1/chat/completions"
 LLM_MODEL = "openai/gpt-oss-20b"
 
 DEFAULT_POOL = (
-    "AAPL,MSFT,NVDA,GOOGL,AMZN,META,TSLA,AMD,AVGO,NFLX,"
-    "JPM,V,MA,BAC,UNH,JNJ,LLY,PFE,XOM,CVX,"
-    "WMT,COST,HD,MCD,KO,NKE,CAT,DIS,SPY,QQQ,"
-    "MS,GS,C,WFC,AXP,CRM,ORCL,IBM,INTC,QCOM,"
-    "TXN,MU,ADBE,PYPL,PLTR,UBER,ABNB,SHOP,CRWD,COIN,"
-    "GILD,AMGN,MRK,ABBV,T,VZ,CMCSA,GE,LMT,SO"
+    "AAPL,MSFT,NVDA,GOOGL,AMZN,META,TSLA,AMD,AVGO,NFLX,CRM,ORCL,IBM,INTC,QCOM,"
+    "TXN,MU,ADBE,PYPL,PLTR,UBER,ABNB,SHOP,CRWD,COIN,NOW,SNPS,CDNS,PANW,DDOG,NET,"
+    "JPM,V,MA,BAC,MS,GS,C,WFC,AXP,BLK,SCHW,COF,USB,PNC,TFC,BK,AIG,MET,PRU,CME,"
+    "UNH,JNJ,LLY,PFE,MRK,ABBV,GILD,AMGN,TMO,ABT,DHR,BMY,ISRG,MDT,SYK,BDX,REGN,VRTX,ZTS,CI,"
+    "XOM,CVX,COP,SLB,EOG,MPC,PSX,VLO,OXY,HAL,KMI,WMB,"
+    "WMT,COST,HD,MCD,KO,NKE,PG,PEP,PM,MO,SBUX,TGT,LOW,TJX,DG,DLTR,ROST,LULU,YUM,CMG,EL,CL,"
+    "CAT,GE,LMT,HON,UPS,RTX,DE,BA,MMM,GD,NOC,FDX,CSX,UNP,ETN,EMR,PH,"
+    "T,VZ,CMCSA,CHTR,TMUS,DIS,WBD,EA,TTWO,"
+    "LIN,APD,SHW,ECL,FCX,NEM,DOW,DD,NUE,MLM,"
+    "AMT,PLD,EQIX,SPG,O,WELL,DLR,AVB,PSA,CCI,"
+    "NEE,DUK,SO,AEP,D,"
+    "SPY,QQQ,DIA,IWM,VOO,XLF,XLE,XLV,XLK,XLI,XLP,XLU"
 )
 TICKER_POOL = [t.strip().upper() for t in os.environ.get(
     "TICKER_POOL", DEFAULT_POOL).split(",") if t.strip()]
@@ -63,6 +73,7 @@ ROTATE_EVERY_DAYS = int(os.environ.get("ROTATE_EVERY_DAYS", "7"))
 TOP_N = int(os.environ.get("TOP_N", "3"))
 FIXED_WATCHLIST = [t.strip().upper() for t in os.environ.get(
     "WATCHLIST", "").split(",") if t.strip()]
+TRACK_RECORD_FILE = os.environ.get("TRACK_RECORD_FILE", "track_record.csv")
 POLYGON_MIN_INTERVAL = 12.2  # free tier: 5 requests/min
 _last_polygon_call = [0.0]
 
@@ -79,8 +90,6 @@ def rotating_window(pool, window_size, period, step=10):
 
 
 def current_universe(now=None):
-    """The tickers to scan this run: fixed WATCHLIST if set, else the
-    rotating window of the pool for the current period."""
     if FIXED_WATCHLIST:
         return FIXED_WATCHLIST, "fixed WATCHLIST (rotation disabled)"
     now = now or datetime.utcnow()
@@ -115,23 +124,11 @@ def polygon_daily(symbol, key):
     return df[["open", "high", "low", "close", "volume"]].astype(float)
 
 
-def fetch_history(symbol, poly_key, av_key):
-    if poly_key:
-        try:
-            return polygon_daily(symbol, poly_key), "polygon"
-        except Exception as e:
-            print(f"  {symbol}: Polygon failed ({e}); trying Alpha Vantage")
-    if av_key:
-        from stock_model import fetch_daily
-        return fetch_daily(symbol, av_key), "alphavantage"
-    raise RuntimeError("no market data key available")
-
-
-def scan(symbols, poly_key, av_key):
+def scan(symbols, poly_key):
     rows = []
     for sym in symbols:
         try:
-            df, src = fetch_history(sym, poly_key, av_key)
+            df = polygon_daily(sym, poly_key)
             data = engineer_features(df)
             train = data.dropna(subset=["target"])
             X, y = train[FEATURES], train["target"]
@@ -141,9 +138,8 @@ def scan(symbols, poly_key, av_key):
             proba = model.predict_proba(latest)[0]
             p_up = float(proba[1]) if len(proba) > 1 else 0.0
             price = float(df["close"].iloc[-1])
-            rows.append({"symbol": sym, "p_up": p_up, "price": price,
-                         "days": len(train), "src": src})
-            print(f"  {sym:6s} P(up)={p_up:.2f} close=${price:,.2f} ({len(train)} days, {src})")
+            rows.append({"symbol": sym, "p_up": p_up, "price": price, "days": len(train)})
+            print(f"  {sym:6s} P(up)={p_up:.2f} close=${price:,.2f} ({len(train)} days)")
         except Exception as e:
             print(f"  {sym}: skipped - {e}")
     return rows
@@ -177,9 +173,30 @@ def llm_commentary(context, api_key):
     return (msg.get("content") or "").strip() or "(model returned empty content)"
 
 
+def log_track_record(universe_desc, scanned, picks, actions, held, equity, dry_run):
+    row = {
+        "date_utc": datetime.utcnow().strftime("%Y-%m-%d %H:%M"),
+        "mode": "dry-run" if dry_run else "paper",
+        "universe": universe_desc,
+        "scanned": scanned,
+        "picks": "|".join(f"{p['symbol']}:{p['p_up']:.2f}" for p in picks),
+        "actions": "|".join(actions),
+        "holdings": "|".join(f"{s}:{q}" for s, q in held.items()),
+        "equity": f"{equity:.2f}",
+    }
+    exists = os.path.exists(TRACK_RECORD_FILE)
+    with open(TRACK_RECORD_FILE, "a", newline="") as f:
+        w = csv.DictWriter(f, fieldnames=list(row.keys()))
+        if not exists:
+            w.writeheader()
+        w.writerow(row)
+    print(f"\nTrack record appended to {TRACK_RECORD_FILE}")
+
+
 def main():
     poly_key = os.environ.get("POLYGON_API_KEY")
-    av_key = os.environ.get("STOCK_API_KEY")
+    if not poly_key:
+        raise SystemExit("POLYGON_API_KEY env var is required.")
     alpaca_key = os.environ.get("ALPACA_API_KEY")
     alpaca_secret = os.environ.get("ALPACA_SECRET_KEY")
     nvidia_key = os.environ.get("API_KEY")
@@ -196,16 +213,15 @@ def main():
         equity = float(acct["equity"])
         positions = alpaca("GET", "/v2/positions", alpaca_key, alpaca_secret)
         held = {p["symbol"]: int(float(p["qty"])) for p in positions}
-        # Always scan current holdings so they are judged on their own signal
         extras = [s for s in held if s not in universe]
         if extras:
             universe = universe + extras
             print(f"Also scanning held positions outside this window: {extras}")
         print(f"Paper account: equity=${equity:,.2f} | holding: {held or 'nothing'}\n")
 
-    rows = scan(universe, poly_key, av_key)
+    rows = scan(universe, poly_key)
     if not rows:
-        raise SystemExit("No ticker data available - check market data keys.")
+        raise SystemExit("No ticker data available - check POLYGON_API_KEY.")
 
     ranked = sorted(rows, key=lambda r: r["p_up"], reverse=True)
     picks = [r for r in ranked if r["p_up"] > 0.5][:TOP_N]
@@ -215,8 +231,8 @@ def main():
     actions = []
 
     if dry_run:
-        print("DRY-RUN: would sell positions not in picks, buy picks not held "
-              f"(~equal weight across {TOP_N} slots)")
+        actions.append(f"DRY-RUN: would hold top {TOP_N} of {len(ranked)} scanned")
+        print(actions[0])
     else:
         # 1) Sell positions that are no longer picks
         for sym, qty in held.items():
@@ -253,10 +269,12 @@ def main():
         if not actions:
             print("  none - portfolio already matches picks")
 
+    log_track_record(universe_desc, len(rows), picks, actions, held, equity, dry_run)
+
     if nvidia_key:
-        context = (f"Universe: {universe_desc}, {len(universe)} tickers scanned. Signals: "
+        context = (f"Universe: {universe_desc}, {len(rows)} tickers scanned. Signals: "
                    + ", ".join(f"{r['symbol']} P(up)={r['p_up']:.2f}" for r in ranked)
-                   + f". Picks: {[p['symbol'] for p in picks]}. Actions: {actions or 'none (dry-run)'}.")
+                   + f". Picks: {[p['symbol'] for p in picks]}. Actions: {actions}.")
         print(f"\n--- AI portfolio commentary ({LLM_MODEL} via NVIDIA API) ---")
         try:
             print(llm_commentary(context, nvidia_key))

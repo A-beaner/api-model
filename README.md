@@ -23,24 +23,28 @@ Compares the latest close for `SYMBOL` from **Alpha Vantage**, **Polygon.io**,
 and **Finnhub**; exits non-zero if any provider diverges beyond
 `TOLERANCE_PCT` (default 1%). Latest run: 0.000% deviation.
 
-## 4. `paper_trading.py` - Portfolio bot with ROTATING universe - LIVE
+## 4. `paper_trading.py` - Portfolio bot, ROTATING 168-ticker universe - LIVE
 
 Autonomous bot on the Alpaca **paper** account ($100k paper equity):
 
-- **Rotating universe:** a pool of **60 tickers** (tech, finance, health,
-  energy, consumer, industrial + SPY/QQQ). Each run scans a window of
-  `WINDOW_SIZE` (30) tickers; the window shifts every `ROTATE_EVERY_DAYS`
-  (7) days, so after each week's after-close runs the bot evaluates a fresh
-  slice of the market. The whole pool is covered over a 6-week cycle.
-- **Holdings are always scanned** regardless of the window - a position is
-  only sold when its own signal turns down, never just because it rotated
-  out of view.
-- Trains a direction model per ticker on **2 years of Polygon daily bars**
-  (Alpha Vantage fallback), paced to the 5 req/min free tier.
-- **Picks tickers itself:** ranks by P(up), holds the `TOP_N` (3) with
-  P(up) > 0.5, equal-weight; **changes tickers itself** each rebalance.
+- **Rotating universe:** a pool of **168 tickers** across tech, finance,
+  health, energy, consumer, industrial, materials, real estate, utilities
+  + index/sector ETFs. Each run scans a window of `WINDOW_SIZE` (30);
+  the window shifts every `ROTATE_EVERY_DAYS` (7) days, so after each week's
+  after-close runs the bot evaluates fresh tickers. Full pool covered over
+  ~17 weeks. Runtime stays ~8.5 min regardless of pool size.
+- **Holdings are always scanned** - a position is only sold when its own
+  signal turns down, never just because it rotated out of view.
+- **Market data: Polygon only** in this step (2y daily bars, paced to the
+  5 req/min free tier). Alpha Vantage stays in `cross_check.py` /
+  `stock_model.py`, so no quota competition.
+- **Picks and changes tickers itself:** ranks by P(up), holds the `TOP_N`
+  (3) with P(up) > 0.5, equal-weight; sells fallen picks, buys new ones.
+- **Track record:** every run appends to `track_record.csv` (date, mode,
+  universe, scanned, picks with probabilities, actions, holdings, equity),
+  committed back to this repo by CI - a full audit trail of every decision.
 - Set `WATCHLIST` to disable rotation and pin a fixed universe.
-- Daily run ~8.5 min. Dry-run mode if Alpaca keys unset.
+- Dry-run mode if Alpaca keys unset.
 
 First live runs: bought NVDA + META, then NVDA + AAPL (~$95k deployed).
 
@@ -64,4 +68,5 @@ python paper_trading.py
 ## CI
 
 Runs on every push **and** weekdays at 22:00 UTC (after US market close):
-Iris training -> cross-check -> stock model -> live portfolio rebalance.
+Iris training -> cross-check -> stock model -> live portfolio rebalance ->
+commit `track_record.csv`.
