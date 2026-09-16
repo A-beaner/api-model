@@ -8,7 +8,7 @@ on:
     - cron: "0 22 * * 1-5"  # weekdays 22:00 UTC, after US market close
 
 permissions:
-  contents: write  # allows the track-record commit step
+  contents: write  # allows the track-record / stop-state commit step
 
 jobs:
   train:
@@ -52,20 +52,30 @@ jobs:
           WINDOW_SIZE: "30"
           ROTATE_EVERY_DAYS: "7"
           TOP_N: "3"
+          # Trading limits (plan to trade with less than $100,000)
+          MAX_PORTFOLIO_VALUE: "100000"
+          MAX_TRADE_VALUE: "50000"
+          MIN_CASH_PCT: "0.05"
+          # Trailing stop-loss
+          STOP_LOSS_PCT: "0.10"
+          STATE_FILE: "stop_state.json"
         run: python paper_trading.py
 
-      - name: Commit track record
+      - name: Commit track record and stop-loss state
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          if [ -f track_record.csv ]; then
-            git add track_record.csv
+          files=""
+          [ -f track_record.csv ] && files="track_record.csv"
+          [ -f stop_state.json ] && files="$files stop_state.json"
+          if [ -n "$files" ]; then
+            git add $files
             if git diff --cached --quiet; then
-              echo "no track record changes"
+              echo "no track record / stop-state changes"
             else
-              git commit -m "chore: track record $(date -u +'%F %H:%M UTC')"
+              git commit -m "chore: track record + stop-loss state $(date -u +'%F %H:%M UTC')"
               git push
             fi
           else
-            echo "no track record file"
+            echo "no track record or stop-state file"
           fi
