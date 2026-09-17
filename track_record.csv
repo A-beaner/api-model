@@ -3,3 +3,4 @@ date_utc,mode,universe,scanned,picks,actions,holdings,equity
 2026-09-15 15:39,paper,"rotating window (pool=168, period=2958)",30,GS:0.74|NOW:0.67|MA:0.65,"BUY 16 GS (~$15,815) -> pending_new|BUY 117 NOW (~$16,655) -> pending_new|BUY 29 MA (~$16,658) -> pending_new",,100459.20
 2026-09-15 23:59,paper,"rotating window (pool=168, period=2958)",30,GS:0.74|NOW:0.67|MA:0.65,,GS:16|MA:29|NOW:117,100335.22
 2026-09-17 00:08,paper,"rotating window (pool=168, period=2959)",30,COIN:0.69|MA:0.69|GS:0.65,"SELL 117 NOW -> accepted|BUY 96 COIN (~$16,523) -> accepted",GS:16|MA:29|NOW:117,99463.79
+2026-09-17 23:56,paper,"rotating window (pool=168, period=2959)",30,JPM:0.70|PANW:0.64|MET:0.63,"SELL 96 COIN -> accepted|SELL 16 GS -> accepted|SELL 29 MA -> accepted|BUY 47 JPM (~$16,399) -> accepted|BUY 44 PANW (~$16,529) -> accepted|BUY 171 MET (~$16,626) -> accepted",COIN:96|GS:16|MA:29,99719.98
