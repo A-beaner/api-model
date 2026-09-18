@@ -56,8 +56,8 @@ jobs:
           MAX_PORTFOLIO_VALUE: "100000"
           MAX_TRADE_VALUE: "50000"
           MIN_CASH_PCT: "0.05"
-          # Trailing stop-loss
-          STOP_LOSS_PCT: "0.10"
+          # Trailing stop-loss (dollars below position peak)
+          STOP_LOSS_DROP: "3.0"
           STATE_FILE: "stop_state.json"
           # Outcome feedback (learn from past mistakes)
           MODEL_MEMORY_FILE: "model_memory.csv"

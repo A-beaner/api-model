@@ -30,8 +30,8 @@ Config env vars:
   MAX_PORTFOLIO_VALUE (default 100000)         - hard cap: total capital deployed, USD
   MAX_TRADE_VALUE     (default 50000)          - max notional per single order, USD
   MIN_CASH_PCT        (default 0.05)           - cash buffer never traded, fraction
-  STOP_LOSS_PCT       (default 0.10)           - trailing stop: sell if price drops this
-                                               much from its peak since purchase
+  STOP_LOSS_DROP      (default 3.0)            - sell if a position's total value drops
+                                               this many USD below its peak while held
   STATE_FILE          (default stop_state.json) - peak prices per holding (persisted)
   MODEL_MEMORY_FILE   (default model_memory.csv) - realized outcomes of past trades
   PERFORMANCE_WEIGHT  (default 1.0)            - how strongly past returns move rankings
@@ -90,9 +90,10 @@ MAX_TRADE_VALUE = float(os.environ.get("MAX_TRADE_VALUE", "50000"))
 MIN_CASH_PCT = float(os.environ.get("MIN_CASH_PCT", "0.05"))
 
 # ---- Trailing stop-loss ----
-# Sell a holding if its price falls STOP_LOSS_PCT from its peak since purchase,
-# but ONLY while the price is still at or above the entry price (never sell at a loss).
-STOP_LOSS_PCT = float(os.environ.get("STOP_LOSS_PCT", "0.10"))
+# Sell a holding if its TOTAL POSITION VALUE falls STOP_LOSS_DROP dollars or more
+# below the peak value it reached while we owned it, but ONLY while the price is
+# still at or above the entry price (never sell at a loss).
+STOP_LOSS_DROP = float(os.environ.get("STOP_LOSS_DROP", "3.0"))  # USD, per position
 STATE_FILE = os.environ.get("STATE_FILE", "stop_state.json")
 
 # ---- Outcome feedback (learn from past mistakes) ----
@@ -108,7 +109,7 @@ _last_polygon_call = [0.0]
 
 
 def load_peak_state():
-    """Persisted per-symbol peak prices since purchase (for the trailing stop)."""
+    """Persisted per-symbol peak POSITION VALUE (qty*price) since purchase."""
     try:
         with open(STATE_FILE) as f:
             return {k: float(v) for k, v in json.load(f).items()}
@@ -287,7 +288,7 @@ def main():
     print(f"Universe: {universe_desc} | scanning {len(universe)} tickers | top {TOP_N}")
     print(f"Limits: max portfolio ${MAX_PORTFOLIO_VALUE:,.0f} | "
           f"max per trade ${MAX_TRADE_VALUE:,.0f} | cash buffer {MIN_CASH_PCT:.0%} | "
-          f"trailing stop {STOP_LOSS_PCT:.0%} from peak (never below entry)")
+          f"stop-loss -${STOP_LOSS_DROP:,.0f} from position peak value (never below entry)")
 
     held = {}
     entries = {}
@@ -331,22 +332,25 @@ def main():
         actions.append(f"DRY-RUN: would hold top {TOP_N} of {len(ranked)} scanned")
         print(actions[0])
     else:
-        # 0) Trailing stop-loss: sell if price dropped STOP_LOSS_PCT from its
-        # peak since purchase - but never sell below the entry (buy) price.
+        # 0) Trailing stop-loss: sell if the position's TOTAL VALUE dropped
+        # STOP_LOSS_DROP dollars or more from its peak value while owned -
+        # but never sell below the entry (buy) price.
         peaks = load_peak_state()
         for sym, qty in list(held.items()):
             price = price_map.get(sym)
             entry = entries.get(sym)
             if price is None or entry is None:
                 continue
-            peaks[sym] = max(peaks.get(sym, price), price)
-            if price <= peaks[sym] * (1 - STOP_LOSS_PCT) and price >= entry:
+            value = qty * price
+            peaks[sym] = max(peaks.get(sym, value), value)
+            drop = peaks[sym] - value
+            if drop >= STOP_LOSS_DROP and price >= entry:
                 try:
                     o = alpaca("POST", "/v2/orders", alpaca_key, alpaca_secret,
                                {"symbol": sym, "qty": str(qty), "side": "sell",
                                 "type": "market", "time_in_force": "day"})
-                    actions.append(f"STOP-LOSS SELL {qty} {sym} (peak ${peaks[sym]:,.2f} "
-                                   f"-> ${price:,.2f}, -{(1 - price / peaks[sym]) * 100:.1f}%, "
+                    actions.append(f"STOP-LOSS SELL {qty} {sym} (value ${peaks[sym]:,.2f} "
+                                   f"-> ${value:,.2f}, -${drop:,.2f}, "
                                    f"entry ${entry:,.2f}) -> {o.get('status')}")
                     ret = record_outcome(sym, entry, price, "stop-loss")
                     actions.append(f"LEARN: {sym} closed at {ret:+.2%} (stop-loss)")
@@ -354,8 +358,8 @@ def main():
                     del held[sym]
                 except Exception as e:
                     actions.append(f"STOP-LOSS SELL {qty} {sym} FAILED: {e}")
-            elif price <= peaks[sym] * (1 - STOP_LOSS_PCT):
-                actions.append(f"STOP-LOSS HOLD {sym} (down {(1 - price / peaks[sym]) * 100:.1f}% "
+            elif drop >= STOP_LOSS_DROP:
+                actions.append(f"STOP-LOSS HOLD {sym} (value down ${drop:,.2f} "
                                f"from peak but below entry ${entry:,.2f} - not selling at a loss)")
 
         # 1) Sell positions that are no longer picks
@@ -397,13 +401,13 @@ def main():
                            {"symbol": sym, "qty": str(qty), "side": "buy",
                             "type": "market", "time_in_force": "day"})
                 actions.append(f"BUY {qty} {sym} (~${qty * pick['price']:,.0f}) -> {o.get('status')}")
-                peaks[sym] = pick["price"]  # start trailing stop tracking
+                peaks[sym] = qty * pick["price"]  # start trailing stop tracking (position value)
             except Exception as e:
                 actions.append(f"BUY {qty} {sym} FAILED: {e}")
 
         save_peak_state(peaks)
 
-        print("\nRebalance actions:")
+        print("\nrebalance actions:")
         for a in actions:
             print(f"  {a}")
         if not actions:
