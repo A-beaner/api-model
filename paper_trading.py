@@ -104,6 +104,16 @@ STATE_FILE = os.environ.get("STATE_FILE", "stop_state.json")
 MODEL_MEMORY_FILE = os.environ.get("MODEL_MEMORY_FILE", "model_memory.csv")
 PERFORMANCE_WEIGHT = float(os.environ.get("PERFORMANCE_WEIGHT", "1.0"))
 MEMORY_WINDOW = int(os.environ.get("MEMORY_WINDOW", "10"))
+
+# ---- Trading algorithm tuning ----
+# BUY: composite score = 0.55*P(up) + 0.20*trend + 0.15*momentum + 0.10*rsi,
+# plus the outcome-memory adjustment. Only buy if the total exceeds MIN_SCORE.
+# Sizing is proportional to conviction (score-weighted), capped by MAX_TRADE_VALUE.
+# SELL: (1) take-profit at +TAKE_PROFIT_PCT from entry, (2) $ trailing stop on
+# total position value, (3) signal/trend breakdown (falls out of picks).
+MIN_SCORE = float(os.environ.get("MIN_SCORE", "0.55"))
+TAKE_PROFIT_PCT = float(os.environ.get("TAKE_PROFIT_PCT", "0.15"))
+MAX_DAILY_VOL = float(os.environ.get("MAX_DAILY_VOL", "0.04"))  # skip wilder tickers
 POLYGON_MIN_INTERVAL = 12.2  # free tier: 5 requests/min
 _last_polygon_call = [0.0]
 
@@ -205,6 +215,41 @@ def polygon_daily(symbol, key):
     return df[["open", "high", "low", "close", "volume"]].astype(float)
 
 
+def indicators(df):
+    """Technical indicators for the composite score."""
+    close = df["close"]
+    sma20 = close.rolling(20).mean().iloc[-1]
+    sma50 = close.rolling(50).mean().iloc[-1]
+    price = float(close.iloc[-1])
+    # trend: 1.0 strong up, 0.5 mild up, 0.0 down
+    trend = 1.0 if price > sma20 > sma50 else (0.5 if price > sma20 else 0.0)
+    # momentum: 20-day return clipped to [-1, 1] then shifted to [0, 1]
+    mom20 = float(close.pct_change(20).iloc[-1])
+    momentum = min(max(mom20 / 0.10, -1.0), 1.0) / 2 + 0.5  # +/-10% maps to 0..1
+    # RSI(14): reward healthy 40-65, penalize overbought >75 and weak <35
+    delta = close.diff()
+    gain = delta.clip(lower=0).rolling(14).mean()
+    loss = (-delta.clip(upper=0)).rolling(14).mean()
+    rs = gain.iloc[-1] / loss.iloc[-1] if loss.iloc[-1] else 100.0
+    rsi = 100 - 100 / (1 + rs)
+    if 40 <= rsi <= 65:
+        rsi_score = 1.0
+    elif rsi > 65:
+        rsi_score = max(0.0, 1 - (rsi - 65) / 20)
+    else:
+        rsi_score = max(0.0, rsi / 40)
+    vol20 = float(close.pct_change().rolling(20).std().iloc[-1])
+    return {"price": price, "trend": trend, "momentum": momentum,
+            "rsi": float(rsi), "rsi_score": rsi_score, "vol20": vol20,
+            "sma20": float(sma20)}
+
+
+def composite_score(p_up, ind):
+    """Multi-factor buy score in [0,1]-ish: model conviction + trend + momentum + RSI."""
+    return (0.55 * p_up + 0.20 * ind["trend"]
+            + 0.15 * ind["momentum"] + 0.10 * ind["rsi_score"])
+
+
 def scan(symbols, poly_key):
     rows = []
     for sym in symbols:
@@ -218,9 +263,14 @@ def scan(symbols, poly_key):
             latest = data[FEATURES].iloc[-1:]
             proba = model.predict_proba(latest)[0]
             p_up = float(proba[1]) if len(proba) > 1 else 0.0
-            price = float(df["close"].iloc[-1])
-            rows.append({"symbol": sym, "p_up": p_up, "price": price, "days": len(train)})
-            print(f"  {sym:6s} P(up)={p_up:.2f} close=${price:,.2f} ({len(train)} days)")
+            ind = indicators(df)
+            price = ind["price"]
+            algo = composite_score(p_up, ind)
+            rows.append({"symbol": sym, "p_up": p_up, "price": price,
+                         "days": len(train), "ind": ind, "algo": algo})
+            print(f"  {sym:6s} P(up)={p_up:.2f} trend={ind['trend']:.1f} "
+                  f"mom={ind['momentum']:.2f} RSI={ind['rsi']:.0f} vol={ind['vol20']:.3f} "
+                  f"-> algo={algo:.2f} close=${price:,.2f}")
         except Exception as e:
             print(f"  {sym}: skipped - {e}")
     return rows
@@ -289,6 +339,8 @@ def main():
     print(f"Limits: max portfolio ${MAX_PORTFOLIO_VALUE:,.0f} | "
           f"max per trade ${MAX_TRADE_VALUE:,.0f} | cash buffer {MIN_CASH_PCT:.0%} | "
           f"stop-loss -${STOP_LOSS_DROP:,.0f} from position peak value (never below entry)")
+    print(f"Algorithm: min score {MIN_SCORE} | take-profit +{TAKE_PROFIT_PCT:.0%} | "
+          f"max daily vol {MAX_DAILY_VOL:.0%} | score-weighted sizing")
 
     held = {}
     entries = {}
@@ -315,13 +367,19 @@ def main():
     for r in rows:
         mem = scores.get(r["symbol"])
         r["memory_adj"] = PERFORMANCE_WEIGHT * mem if mem is not None else 0.0
-        r["score"] = r["p_up"] + r["memory_adj"]
+        r["score"] = r["algo"] + r["memory_adj"]
         if mem is not None:
             print(f"  {r['symbol']:6s} memory: avg return {mem:+.2%} over past trades "
-                  f"-> score {r['p_up']:.2f} {r['memory_adj']:+.2f} = {r['score']:.2f}")
+                  f"-> score {r['algo']:.2f} {r['memory_adj']:+.2f} = {r['score']:.2f}")
+        if r["ind"]["vol20"] > MAX_DAILY_VOL:
+            r["score"] = -1  # too volatile - excluded from buys
+            print(f"  {r['symbol']:6s} excluded: daily vol {r['ind']['vol20']:.3f} > {MAX_DAILY_VOL}")
+        if r["ind"]["rsi"] > 75:
+            r["score"] = -1  # overbought - don't chase
+            print(f"  {r['symbol']:6s} excluded: RSI {r['ind']['rsi']:.0f} overbought")
 
     ranked = sorted(rows, key=lambda r: r["score"], reverse=True)
-    picks = [r for r in ranked if r["score"] > 0.5][:TOP_N]
+    picks = [r for r in ranked if r["score"] > MIN_SCORE][:TOP_N]
     print(f"\nPicks: {[p['symbol'] for p in picks] if picks else 'NONE - all signals down, going to cash'}")
 
     target = {p["symbol"] for p in picks}
@@ -332,6 +390,27 @@ def main():
         actions.append(f"DRY-RUN: would hold top {TOP_N} of {len(ranked)} scanned")
         print(actions[0])
     else:
+        # -1) Take-profit: lock in gains at +TAKE_PROFIT_PCT from entry
+        for sym, qty in list(held.items()):
+            price = price_map.get(sym)
+            entry = entries.get(sym)
+            if price is None or entry is None:
+                continue
+            if price >= entry * (1 + TAKE_PROFIT_PCT):
+                try:
+                    o = alpaca("POST", "/v2/orders", alpaca_key, alpaca_secret,
+                               {"symbol": sym, "qty": str(qty), "side": "sell",
+                                "type": "market", "time_in_force": "day"})
+                    actions.append(f"TAKE-PROFIT SELL {qty} {sym} (entry ${entry:,.2f} "
+                                   f"-> ${price:,.2f}, +{(price / entry - 1) * 100:.1f}%) "
+                                   f"-> {o.get('status')}")
+                    ret = record_outcome(sym, entry, price, "take-profit")
+                    actions.append(f"LEARN: {sym} closed at {ret:+.2%} (take-profit)")
+                    peaks.pop(sym, None)
+                    del held[sym]
+                except Exception as e:
+                    actions.append(f"TAKE-PROFIT SELL {qty} {sym} FAILED: {e}")
+
         # 0) Trailing stop-loss: sell if the position's TOTAL VALUE dropped
         # STOP_LOSS_DROP dollars or more from its peak value while owned -
         # but never sell below the entry (buy) price.
@@ -387,11 +466,14 @@ def main():
             actions.append(f"LIMIT: equity ${equity:,.2f} exceeds cap "
                            f"${MAX_PORTFOLIO_VALUE:,.2f} - deploying "
                            f"${deployable:,.2f} only")
-        budget = min(deployable * (1 - MIN_CASH_PCT) / TOP_N, MAX_TRADE_VALUE)
+        # Score-weighted sizing: stronger picks get a bigger share of the budget
+        total_score = sum(max(p["score"], 0.01) for p in picks) or 1.0
+        pool = min(deployable * (1 - MIN_CASH_PCT), MAX_TRADE_VALUE * len(picks))
         for pick in picks:
             sym = pick["symbol"]
             if sym in held:
                 continue
+            budget = min(pool * max(pick["score"], 0.01) / total_score, MAX_TRADE_VALUE)
             qty = int(budget // pick["price"])
             if qty < 1:
                 actions.append(f"BUY {sym} skipped (price ${pick['price']:,.2f} > slot budget)")

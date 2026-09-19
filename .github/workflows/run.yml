@@ -63,6 +63,10 @@ jobs:
           MODEL_MEMORY_FILE: "model_memory.csv"
           PERFORMANCE_WEIGHT: "1.0"
           MEMORY_WINDOW: "10"
+          # Algorithm tuning
+          MIN_SCORE: "0.55"
+          TAKE_PROFIT_PCT: "0.15"
+          MAX_DAILY_VOL: "0.04"
         run: python paper_trading.py
 
       - name: Commit track record and bot state
