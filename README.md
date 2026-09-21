@@ -1,7 +1,7 @@
 # api-model
 
-ML pipelines + an autonomous paper-trading bot, powered by API keys stored as
-encrypted secrets (never in code):
+ML pipelines + an autonomous paper-trading bot with continuous self-training,
+powered by API keys stored as encrypted secrets (never in code):
 
 ## 1. `train_model.py` - Iris classifier + LLM analysis
 
@@ -23,30 +23,34 @@ Compares the latest close for `SYMBOL` from **Alpha Vantage**, **Polygon.io**,
 and **Finnhub**; exits non-zero if any provider diverges beyond
 `TOLERANCE_PCT` (default 1%). Latest run: 0.000% deviation.
 
-## 4. `paper_trading.py` - Portfolio bot, ROTATING 168-ticker universe - LIVE
+## 4. `continuous_train.py` - Continuous self-training layer
+
+Runs every CI cycle (daily after close), before the trading bot:
+
+- **Ever-growing data cache:** each ticker's `data/<SYM>.csv` is updated
+  incrementally with the newest bars - the training set grows every day.
+- **Scheduled retraining:** models are retrained with walk-forward validation
+  and persisted to `models/<SYM>.joblib` (fresh for `RETRAIN_DAYS`, default 7).
+- **Metrics + drift detection:** every validation is logged to `metrics.json`.
+  If a model's accuracy decays more than `DRIFT_TOLERANCE` (10%) below its own
+  trailing average, it is flagged as drifted and the bot refuses to use it.
+
+## 5. `paper_trading.py` - Portfolio bot, ROTATING 168-ticker universe - LIVE
 
 Autonomous bot on the Alpaca **paper** account ($100k paper equity):
 
-- **Rotating universe:** a pool of **168 tickers** across tech, finance,
-  health, energy, consumer, industrial, materials, real estate, utilities
-  + index/sector ETFs. Each run scans a window of `WINDOW_SIZE` (30);
-  the window shifts every `ROTATE_EVERY_DAYS` (7) days, so after each week's
-  after-close runs the bot evaluates fresh tickers. Full pool covered over
-  ~17 weeks. Runtime stays ~8.5 min regardless of pool size.
-- **Holdings are always scanned** - a position is only sold when its own
-  signal turns down, never just because it rotated out of view.
-- **Market data: Polygon only** in this step (2y daily bars, paced to the
-  5 req/min free tier). Alpha Vantage stays in `cross_check.py` /
-  `stock_model.py`, so no quota competition.
-- **Picks and changes tickers itself:** ranks by P(up), holds the `TOP_N`
-  (3) with P(up) > 0.5, equal-weight; sells fallen picks, buys new ones.
-- **Track record:** every run appends to `track_record.csv` (date, mode,
-  universe, scanned, picks with probabilities, actions, holdings, equity),
-  committed back to this repo by CI - a full audit trail of every decision.
-- Set `WATCHLIST` to disable rotation and pin a fixed universe.
-- Dry-run mode if Alpaca keys unset.
-
-First live runs: bought NVDA + META, then NVDA + AAPL (~$95k deployed).
+- **Loads continuously-retrained models** from `continuous_train.py` when
+  fresh and drift-free; otherwise trains inline with walk-forward validation
+  (tickers below 52% walk-forward accuracy are rejected).
+- **Rotating universe:** a pool of **168 tickers** + index/sector ETFs; scans a
+  window of 30, shifting every 7 days. Holdings are always scanned - a
+  position is only sold when its own signal turns down.
+- **Risk layer:** ATR stop-loss + 2:1 take-profit via Alpaca **bracket
+  orders**, position sizing risk-based at 1% of equity per trade, 20-day time
+  exits, and a **kill switch** that halts all trading if equity drops 3% in a
+  day.
+- **Track record:** every run appends to `track_record.csv`, committed back by
+  CI along with `metrics.json`, `data/`, and `models/`.
 
 ## API key setup (important)
 
@@ -62,11 +66,13 @@ pip install -r requirements.txt
 python train_model.py
 python cross_check.py
 python stock_model.py
+python continuous_train.py
 python paper_trading.py
 ```
 
 ## CI
 
 Runs on every push **and** weekdays at 22:00 UTC (after US market close):
-Iris training -> cross-check -> stock model -> live portfolio rebalance ->
-commit `track_record.csv`.
+Iris training -> cross-check -> stock model -> **continuous training
+(cache/retrain/drift)** -> live portfolio rebalance -> commit track record,
+metrics, data cache, and models.

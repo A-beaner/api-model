@@ -3,17 +3,22 @@ name: train-model
 on:
   push:
     branches: [main]
+    paths-ignore:
+      - 'data/**'
+      - 'models/**'
+      - 'metrics.json'
+      - 'track_record.csv'
   workflow_dispatch:
   schedule:
     - cron: "0 22 * * 1-5"  # weekdays 22:00 UTC, after US market close
 
 permissions:
-  contents: write  # allows the track-record commit step
+  contents: write  # allows the commit steps
 
 jobs:
   train:
     runs-on: ubuntu-latest
-    timeout-minutes: 25
+    timeout-minutes: 40
     steps:
       - uses: actions/checkout@v4
 
@@ -43,6 +48,13 @@ jobs:
           STOCK_API_KEY: ${{ secrets.STOCK_API_KEY }}
         run: python stock_model.py
 
+      - name: Continuous training (cache data, retrain, drift check)
+        env:
+          POLYGON_API_KEY: ${{ secrets.POLYGON_API_KEY }}
+          WINDOW_SIZE: "30"
+          ROTATE_EVERY_DAYS: "7"
+        run: python continuous_train.py
+
       - name: Paper trade portfolio (live on Alpaca paper, rotating universe)
         env:
           API_KEY: ${{ secrets.API_KEY }}
@@ -54,18 +66,14 @@ jobs:
           TOP_N: "3"
         run: python paper_trading.py
 
-      - name: Commit track record
+      - name: Commit track record + training artifacts
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          if [ -f track_record.csv ]; then
-            git add track_record.csv
-            if git diff --cached --quiet; then
-              echo "no track record changes"
-            else
-              git commit -m "chore: track record $(date -u +'%F %H:%M UTC')"
-              git push
-            fi
+          git add track_record.csv metrics.json data/ models/ 2>/dev/null || true
+          if git diff --cached --quiet; then
+            echo "no changes"
           else
-            echo "no track record file"
+            git commit -m "chore: daily training + track record $(date -u +'%F %H:%M UTC')"
+            git push
           fi

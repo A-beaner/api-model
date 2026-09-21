@@ -7,14 +7,15 @@ rotates every ROTATE_EVERY_DAYS days. Currently-held positions are ALWAYS
 scanned too, so a holding is only sold when its own signal turns down - never
 just because it rotated out of view.
 
-Per run: train a direction model per ticker (Polygon 2y daily bars), validate
-it with WALK-FORWARD cross-validation (tickers that fail are skipped), rank by
-P(up), hold the TOP_N with P(up) > 0.5. Position size is RISK-BASED: each new
-position risks at most RISK_PER_TRADE of equity, sized from its ATR stop
-distance (capped by an equal-weight slot budget and the daily trade limit).
-New buys are placed as Alpaca BRACKET orders with an ATR stop-loss and a
-reward:risk take-profit. Positions older than MAX_HOLD_DAYS are closed (time
-exit). A KILL SWITCH halts all new trading if equity is down more than
+Per run: load the persisted, continuously-retrained model per ticker when one
+is fresh and drift-free (see continuous_train.py); otherwise train inline and
+validate with WALK-FORWARD cross-validation (tickers that fail are skipped),
+rank by P(up), hold the TOP_N with P(up) > 0.5. Position size is RISK-BASED:
+each new position risks at most RISK_PER_TRADE of equity, sized from its ATR
+stop distance (capped by an equal-weight slot budget and the daily trade
+limit). New buys are placed as Alpaca BRACKET orders with an ATR stop-loss
+and a reward:risk take-profit. Positions older than MAX_HOLD_DAYS are closed
+(time exit). A KILL SWITCH halts all new trading if equity is down more than
 KILL_SWITCH_DD vs the previous day's equity.
 
 Market data: Polygon only. Keys from environment - NEVER hardcode secrets:
@@ -177,24 +178,34 @@ def walk_forward_accuracy(data, folds=WF_FOLDS):
 
 def scan(symbols, poly_key):
     rows = []
+    try:
+        from continuous_train import load_model
+    except ImportError:
+        load_model = None
     for sym in symbols:
         try:
             df = polygon_daily(sym, poly_key)
             data = engineer_features(df)
-            wf_acc = walk_forward_accuracy(data)
-            train = data.dropna(subset=["target"])
-            X, y = train[FEATURES], train["target"]
-            model = RandomForestClassifier(n_estimators=200, max_depth=5, random_state=42)
-            model.fit(X, y)
+            cached = load_model(sym) if load_model else None
+            if cached:
+                # Continuous-training layer: fresh, drift-free persisted model
+                model, wf_acc = cached
+                print(f"  {sym:6s} using persisted model (wf_acc={wf_acc:.2f})")
+            else:
+                wf_acc = walk_forward_accuracy(data)
+                train = data.dropna(subset=["target"])
+                X, y = train[FEATURES], train["target"]
+                model = RandomForestClassifier(n_estimators=200, max_depth=5, random_state=42)
+                model.fit(X, y)
             latest = data[FEATURES].iloc[-1:]
             proba = model.predict_proba(latest)[0]
             p_up = float(proba[1]) if len(proba) > 1 else 0.0
             price = float(df["close"].iloc[-1])
             atr = compute_atr(df)
             rows.append({"symbol": sym, "p_up": p_up, "price": price,
-                         "atr": atr, "wf_acc": wf_acc, "days": len(train)})
+                         "atr": atr, "wf_acc": wf_acc, "days": len(data)})
             print(f"  {sym:6s} P(up)={p_up:.2f} wf_acc={wf_acc:.2f} "
-                  f"close=${price:,.2f} atr=${atr:.2f} ({len(train)} days)")
+                  f"close=${price:,.2f} atr=${atr:.2f} ({len(data)} days)")
         except Exception as e:
             print(f"  {sym}: skipped - {e}")
     return rows
