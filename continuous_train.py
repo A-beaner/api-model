@@ -1,8 +1,7 @@
 """
 continuous_train.py - Continuous self-training layer for the stock models.
 
-Runs on every CI cycle (daily after close). For each ticker in the current
-universe it:
+Runs on every CI cycle (daily). For each ticker in the current universe it:
   1. INCREMENTALLY updates a persistent price cache (data/<SYM>.csv) with the
      newest daily candles - Alpaca stock bars first (same source as the
      charts and orders), Polygon fallback - the dataset grows forever.
@@ -10,12 +9,15 @@ universe it:
      (models/<SYM>.joblib) so paper_trading.py can load a fresh, pre-validated
      model instead of training from scratch.
   3. LOGS validation accuracy to metrics.json over time and flags DRIFT when a
-     model's accuracy decays vs its own history - the bot's "do I still have an
-     edge?" sensor.
+     model's accuracy decays vs its own history.
+  4. Runs strategy_gate.py so the model CHOOSES which trading conditions
+     (regime filter, dip exit, cooldown, confidence sizing) actually help each
+     ticker, saved to strategy_state.json.
+  5. Archives everything learned into LEARNING.md (committed back by CI).
 
 Reality check: no model reads markets flawlessly. This layer maximizes what is
-actually achievable: ever-growing data, frequent retraining, and hard metrics
-that tell you when the edge is gone.
+actually achievable: ever-growing data, frequent retraining, self-selected
+conditions, and hard metrics that tell you when the edge is gone.
 
 Env: POLYGON_API_KEY (required; Alpaca keys used when set). Config:
 RETRAIN_DAYS (default 7), DRIFT_TOLERANCE (default 0.10),
@@ -196,6 +198,41 @@ def train_universe(symbols, key):
     print(f"\nMetrics written to {METRICS_FILE}; models in {MODEL_DIR}/; cache in {DATA_DIR}/")
 
 
+def write_learning(metrics, state, universe_desc):
+    """Append a dated entry to LEARNING.md - the repo's archive of what the
+    models have learned: validation accuracy, drift, and which conditions the
+    backtests enabled per ticker."""
+    from datetime import datetime as _dt
+    lines = []
+    lines.append(f"\n## {_dt.utcnow().strftime('%Y-%m-%d %H:%M')} UTC - {universe_desc}\n")
+    lines.append("| Ticker | Walk-fwd acc | Drift | Tradable | Conditions enabled |")
+    lines.append("|---|---|---|---|---|")
+    for sym in sorted(metrics):
+        m = metrics[sym]
+        conds = state.get(sym, {}).get("enabled_conditions", [])
+        lines.append(f"| {sym} | {m.get('last_wf_acc', '-') } | "
+                     f"{'YES' if m.get('drift') else 'no'} | "
+                     f"{'yes' if m.get('tradable') else 'NO'} | "
+                     f"{', '.join(conds) if conds else '-'} |")
+    regime = state.get("_global", {}).get("regime_filter")
+    lines.append(f"\nGlobal regime filter (SPY > 50d SMA): "
+                 f"{'ENABLED' if regime else 'disabled'}\n")
+    entry = "\n".join(lines)
+    existing = ""
+    if os.path.exists("LEARNING.md"):
+        with open("LEARNING.md") as f:
+            existing = f.read()
+    if not existing.startswith("# LEARNING"):
+        header = ("# LEARNING.md - What the models have learned\n\n"
+                  "Auto-written by continuous_train.py after every CI run. "
+                  "Each entry archives walk-forward accuracy, model drift, and "
+                  "which strategy conditions backtesting enabled per ticker.\n")
+        existing = header + existing
+    with open("LEARNING.md", "w") as f:
+        f.write(existing + entry)
+    print("LEARNING.md updated")
+
+
 if __name__ == "__main__":
     poly_key = os.environ.get("POLYGON_API_KEY")
     if not poly_key:
@@ -204,4 +241,16 @@ if __name__ == "__main__":
     from paper_trading import current_universe
     universe, desc = current_universe()
     print(f"Continuous training on {len(universe)} tickers ({desc})")
-    train_universe(universe, poly_key)
+    # SPY is always cached too - the regime filter needs it
+    train_universe(sorted(set(universe) | {"SPY"}), poly_key)
+
+    # Meta-layer: backtest which conditions help per ticker, then archive
+    from strategy_gate import gate_universe, load_state, save_state
+    state = gate_universe(sorted(set(universe) | {"SPY"}))
+    votes = [1 for s, v in state.items()
+             if s != "_global" and "regime_filter" in v.get("enabled_conditions", [])]
+    total = max(1, len([s for s in state if s != "_global"]))
+    state["_global"] = {"regime_filter": len(votes) > total / 2}
+    save_state(state)
+    metrics = load_metrics()
+    write_learning(metrics, state, desc)

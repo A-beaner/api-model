@@ -8,6 +8,8 @@ on:
       - 'models/**'
       - 'metrics.json'
       - 'track_record.csv'
+      - 'LEARNING.md'
+      - 'strategy_state.json'
   workflow_dispatch:
   schedule:
     - cron: "30 19 * * 1-5"  # weekdays 19:30 UTC = 3:30pm ET, market still open
@@ -48,9 +50,11 @@ jobs:
           STOCK_API_KEY: ${{ secrets.STOCK_API_KEY }}
         run: python stock_model.py
 
-      - name: Continuous training (cache data, retrain, drift check)
+      - name: Continuous training + strategy gate + learning archive
         env:
           POLYGON_API_KEY: ${{ secrets.POLYGON_API_KEY }}
+          ALPACA_API_KEY: ${{ secrets.ALPACA_API_KEY }}
+          ALPACA_SECRET_KEY: ${{ secrets.ALPACA_SECRET_KEY }}
           WINDOW_SIZE: "30"
           ROTATE_EVERY_DAYS: "7"
         run: python continuous_train.py
@@ -70,7 +74,7 @@ jobs:
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add track_record.csv metrics.json data/ models/ 2>/dev/null || true
+          git add track_record.csv metrics.json LEARNING.md strategy_state.json data/ models/ 2>/dev/null || true
           if git diff --cached --quiet; then
             echo "no changes"
           else

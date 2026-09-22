@@ -20,10 +20,14 @@ stop distance (capped by an equal-weight slot budget and the daily trade
 limit). New buys are placed as Alpaca BRACKET orders with an ATR stop-loss
 and a reward:risk take-profit. Positions older than MAX_HOLD_DAYS are closed
 (time exit). A TRAILING-DIP PROFIT LOCK sells any holding that is >=
-DIP_EXIT_PCT (default 1.25%) off today's high while still above its entry
-price. A KILL SWITCH halts all new trading if equity is down more than
-KILL_SWITCH_DD vs the previous day's equity. Orders are only placed while the
-market is OPEN (Alpaca clock check) - off-hours orders are rejected (403).
+DIP_EXIT_PCT off today's high while still above its entry. A KILL SWITCH
+halts all new trading if equity is down more than KILL_SWITCH_DD vs the
+previous day's equity. Orders are only placed while the market is OPEN.
+
+STRATEGY GATE (strategy_gate.py / strategy_state.json): the model itself
+chooses, per ticker, whether the dip exit, cooldown, and confidence sizing
+conditions are active, and globally whether the SPY regime filter gates new
+buys - based on which conditions improved its own walk-forward backtests.
 
 Keys from environment - NEVER hardcode secrets:
   POLYGON_API_KEY     (Polygon.io - fallback market data)
@@ -264,6 +268,24 @@ def market_is_open(key, secret):
         return False, None, None
 
 
+def gate_state():
+    """Load the model-chosen strategy conditions (written by strategy_gate.py)."""
+    try:
+        from strategy_gate import load_state
+        return load_state()
+    except Exception:
+        return {}
+
+
+def cond_enabled(state, sym, cond, default=True):
+    """Is a condition enabled for this ticker? Default applies when the gate
+    has no opinion yet (e.g. first runs)."""
+    entry = state.get(sym, {})
+    if "enabled_conditions" not in entry:
+        return default
+    return cond in entry["enabled_conditions"]
+
+
 def holding_days(symbol, key, secret):
     """Days since the most recent filled BUY for `symbol` (for time exits).
     Returns None if unknown."""
@@ -389,8 +411,12 @@ def main():
         pass  # trading blocked this run; skip to logging
     elif not dry_run:
         # 0) TRAILING-DIP PROFIT LOCK: sell if >=DIP_EXIT_PCT off today's high
-        #    and still above entry - locks gains before they round-trip
+        #    and still above entry - locks gains before they round-trip.
+        #    (Skipped per-ticker if the strategy gate disabled it.)
+        state = gate_state()
         for sym, qty in held.items():
+            if not cond_enabled(state, sym, "dip_exit", default=True):
+                continue  # backtests found the dip exit hurts this ticker
             triggered, dip, price, peak = dip_exit_triggered(
                 sym, entry_px.get(sym, float("inf")), poly_key)
             if triggered:
@@ -416,6 +442,17 @@ def main():
                 except Exception as e:
                     actions.append(f"TIME-EXIT SELL {qty} {sym} FAILED: {e}")
 
+        # record exits so the cooldown condition can block quick re-entry
+        for a in actions:
+            if (a.startswith(("SELL", "DIP-EXIT", "TIME-EXIT")) and "FAILED" not in a):
+                sym_done = a.split()[2] if a.startswith(("DIP-EXIT", "TIME-EXIT")) else a.split()[1]
+                state.setdefault(sym_done, {})["last_exit"] = datetime.utcnow().strftime("%Y-%m-%d")
+        try:
+            from strategy_gate import save_state
+            save_state(state)
+        except Exception:
+            pass
+
         # 2) Sell positions that are no longer picks (and not just exited)
         exited = {a.split()[2] for a in actions
                   if (a.startswith("TIME-EXIT SELL") or a.startswith("DIP-EXIT SELL"))
@@ -434,11 +471,32 @@ def main():
         daily_budget = min(equity * 0.95, DAILY_TRADE_LIMIT_USD)
         slot_budget = daily_budget / TOP_N
         print(f"Daily trade limit: ${DAILY_TRADE_LIMIT_USD:,.0f} -> slot budget ${slot_budget:,.2f}")
+        # REGIME FILTER: if the gate enabled it, only buy with SPY above its 50d SMA
+        regime_ok = True
+        if state.get("_global", {}).get("regime_filter"):
+            try:
+                spy = polygon_daily("SPY", poly_key)
+                regime_ok = bool(spy["close"].iloc[-1] > spy["close"].rolling(50).mean().iloc[-1])
+                print(f"Regime filter ON: SPY {'above' if regime_ok else 'BELOW'} 50d SMA")
+            except Exception as e:
+                print(f"Regime check failed ({e}); allowing buys")
         for pick in picks:
             sym = pick["symbol"]
             if sym in held:
                 continue
+            if not regime_ok:
+                actions.append(f"BUY {sym} skipped (regime filter: SPY below 50d SMA)")
+                continue
+            # COOLDOWN: skip re-entry within 5 days of an exit, if the gate enabled it
+            last_exit = state.get(sym, {}).get("last_exit")
+            if (cond_enabled(state, sym, "cooldown", default=False) and last_exit and
+                    (datetime.utcnow() - datetime.strptime(last_exit, "%Y-%m-%d")).days < 5):
+                actions.append(f"BUY {sym} skipped (cooldown until 5d after {last_exit})")
+                continue
             qty = risk_based_qty(equity, pick["price"], pick["atr"], slot_budget)
+            # CONFIDENCE SIZING: scale size by signal strength if the gate enabled it
+            if cond_enabled(state, sym, "confidence_sizing", default=False):
+                qty = int(qty * (1.0 + 2.0 * (pick["p_up"] - 0.5)))
             if qty < 1:
                 actions.append(f"BUY {sym} skipped (risk/size constraints)")
                 continue
