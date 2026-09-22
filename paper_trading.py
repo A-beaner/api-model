@@ -49,7 +49,9 @@ Config env vars:
   TP_RR                 (default 2.0)    - take-profit reward:risk ratio
   MAX_HOLD_DAYS         (default 20)     - time exit: close positions older than this
   KILL_SWITCH_DD        (default 0.03)   - halt trading if daily drawdown exceeds this
-  MIN_WF_ACCURACY       (default 0.52)   - min walk-forward accuracy to trade a ticker
+  MIN_WF_ACCURACY       (default 0.54)   - min walk-forward accuracy to trade a ticker
+  P_UP_MIN              (default 0.55)   - min P(up) for a new buy
+  MIN_HOLD_DAYS         (default 3)      - don't rotation-sell positions younger than this
   DIP_EXIT_PCT          (default 0.0125) - sell if this far off day high and above entry
   STRATEGY_CONFIG_FILE  (default strategy_config.json) - model-chosen conditions
 """
@@ -108,8 +110,10 @@ STOP_ATR_MULT = float(os.environ.get("STOP_ATR_MULT", "2.0"))
 TP_RR = float(os.environ.get("TP_RR", "2.0"))
 MAX_HOLD_DAYS = int(os.environ.get("MAX_HOLD_DAYS", "20"))
 KILL_SWITCH_DD = float(os.environ.get("KILL_SWITCH_DD", "0.03"))
-MIN_WF_ACCURACY = float(os.environ.get("MIN_WF_ACCURACY", "0.52"))
+MIN_WF_ACCURACY = float(os.environ.get("MIN_WF_ACCURACY", "0.54"))
 DIP_EXIT_PCT = float(os.environ.get("DIP_EXIT_PCT", "0.0125"))  # sell if 1.25% off day high and above entry
+P_UP_MIN = float(os.environ.get("P_UP_MIN", "0.55"))  # min P(up) to buy - coin-flip signals cost money
+MIN_HOLD_DAYS = int(os.environ.get("MIN_HOLD_DAYS", "3"))  # don't churn positions younger than this
 WF_FOLDS = 3  # walk-forward validation folds
 
 STRATEGY_CONFIG_FILE = os.environ.get("STRATEGY_CONFIG_FILE", "strategy_config.json")
@@ -257,16 +261,32 @@ def risk_based_qty(equity, price, atr, slot_budget):
     return min(risk_qty, budget_qty)
 
 
-def alpaca(method, path, key, secret, body=None):
-    req = urllib.request.Request(
-        ALPACA_BASE + path,
-        data=json.dumps(body).encode() if body is not None else None,
-        method=method,
-        headers={"APCA-API-KEY-ID": key, "APCA-API-SECRET-KEY": secret,
-                 "Content-Type": "application/json", "Accept": "application/json"})
-    with urllib.request.urlopen(req, timeout=30) as r:
-        raw = r.read()
-        return json.loads(raw) if raw else {}
+def alpaca(method, path, key, secret, body=None, retries=3):
+    """Alpaca API call with retry/backoff on transient 403/5xx failures.
+    A failed SELL leaves a phantom position, so retry before giving up."""
+    last_err = None
+    for attempt in range(retries):
+        req = urllib.request.Request(
+            ALPACA_BASE + path,
+            data=json.dumps(body).encode() if body is not None else None,
+            method=method,
+            headers={"APCA-API-KEY-ID": key, "APCA-API-SECRET-KEY": secret,
+                     "Content-Type": "application/json", "Accept": "application/json"})
+        try:
+            with urllib.request.urlopen(req, timeout=30) as r:
+                raw = r.read()
+                return json.loads(raw) if raw else {}
+        except urllib.error.HTTPError as e:
+            last_err = e
+            if e.code in (403, 429) or e.code >= 500:
+                if attempt < retries - 1:
+                    wait = 5 * (attempt + 1)
+                    print(f"  {method} {path} -> HTTP {e.code}, retrying in {wait}s "
+                          f"(attempt {attempt + 1}/{retries})")
+                    time.sleep(wait)
+                    continue
+            raise
+    raise last_err
 
 
 def regime_ok(poly_key):
@@ -445,7 +465,7 @@ def main():
               f"{[(r['symbol'], round(r['wf_acc'], 2)) for r in rejected]}")
 
     ranked = sorted(valid, key=lambda r: r["p_up"], reverse=True)
-    picks = [r for r in ranked if r["p_up"] > 0.5][:TOP_N]
+    picks = [r for r in ranked if r["p_up"] >= P_UP_MIN][:TOP_N]
     print(f"\nPicks: {[p['symbol'] for p in picks] if picks else 'NONE - all signals down, going to cash'}")
 
     target = {p["symbol"] for p in picks}
@@ -500,6 +520,10 @@ def main():
                   and "FAILED" not in a}
         for sym, qty in held.items():
             if sym not in target and sym not in exited:
+                days_held = holding_days(sym, alpaca_key, alpaca_secret)
+                if days_held is not None and days_held < MIN_HOLD_DAYS:
+                    actions.append(f"HOLD {qty} {sym} (held {days_held}d < min {MIN_HOLD_DAYS}d - avoiding churn)")
+                    continue
                 try:
                     o = alpaca("POST", "/v2/orders", alpaca_key, alpaca_secret,
                                {"symbol": sym, "qty": str(qty), "side": "sell",
@@ -509,7 +533,12 @@ def main():
                     actions.append(f"SELL {qty} {sym} FAILED: {e}")
 
         # 3) Buy new picks: risk-based size, BRACKET order with ATR stop + TP
+        failed_sells = [a for a in actions if "SELL" in a and "FAILED" in a]
         buys_allowed = regime_ok(poly_key) and weekend_ok()
+        if failed_sells:
+            buys_allowed = False
+            actions.append(f"BUYS BLOCKED: {len(failed_sells)} SELL(s) failed - "
+                           f"positions may still be open; refusing to add risk")
         if not buys_allowed:
             actions.append("BUYS BLOCKED by strategy config (regime/weekend)")
         invested = sum(int(q) * float(entry_px.get(s, 0)) for s, q in held.items())
@@ -525,7 +554,7 @@ def main():
             if cooldown_blocked(sym):
                 actions.append(f"BUY {sym} skipped (cooldown)")
                 continue
-            qty = risk_based_qty(equity, pick["price"], pick["atr"], slot_budget)
+            qty = risk_based_quy(equity, pick["price"], pick["atr"], slot_budget)
             if COND.get("confidence_sizing"):
                 lo = float(PARAMS.get("confidence_size_min", 0.5))
                 hi = float(PARAMS.get("confidence_size_max", 1.5))
