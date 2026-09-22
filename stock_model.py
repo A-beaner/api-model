@@ -1,10 +1,12 @@
 """
 stock_model.py - Stock trading model.
 
-Fetches daily OHLCV data from Alpha Vantage (STOCK_API_KEY env var), engineers
-technical features, and trains a RandomForest to predict next-day price direction
-(up/down). Includes a simple long-only backtest vs buy-and-hold on the test window,
-plus an optional LLM analysis via the NVIDIA API (API_KEY env var).
+Daily OHLCV candles come from Alpaca market data when keys are set (same
+source as the charts and the orders), with Polygon and Alpha Vantage as
+fallbacks. Engineers technical + candlestick features and trains a
+RandomForest to predict next-day price direction (up/down). Includes a
+simple long-only backtest vs buy-and-hold on the test window, plus an
+optional LLM analysis via the NVIDIA API (API_KEY env var).
 
 Keys come from environment variables - NEVER hardcode secrets.
 """
@@ -28,7 +30,10 @@ ALPHA_VANTAGE_URL = "https://www.alphavantage.co/query"
 NVIDIA_API_URL = "https://integrate.api.nvidia.com/v1/chat/completions"
 LLM_MODEL = "openai/gpt-oss-20b"
 SYMBOL = os.environ.get("SYMBOL", "IBM")
-FEATURES = ["return_1d", "return_5d", "sma_ratio_5_20", "volatility_10", "volume_change", "rsi_14"]
+FEATURES = ["return_1d", "return_5d", "sma_ratio_5_20", "volatility_10", "volume_change", "rsi_14",
+            "body_pct", "upper_wick", "lower_wick", "hl_range", "gap_pct", "up_streak"]
+
+ALPACA_DATA_URL = "https://data.alpaca.markets"
 
 
 def fetch_daily(symbol, api_key):
@@ -46,9 +51,63 @@ def fetch_daily(symbol, api_key):
     return df
 
 
+def alpaca_daily(symbol, days=730, key=None, secret=None):
+    """Fetch daily bars (candles) from Alpaca market data - free with the
+    paper-trading keys. Used by the bot so charts and orders come from one source."""
+    key = key or os.environ.get("ALPACA_API_KEY")
+    secret = secret or os.environ.get("ALPACA_SECRET_KEY")
+    if not (key and secret):
+        raise RuntimeError("Alpaca keys not set")
+    from datetime import datetime, timedelta
+    end = datetime.utcnow().date()
+    start = end - timedelta(days=days)
+    url = (f"{ALPACA_DATA_URL}/v2/stocks/{symbol}/bars?timeframe=1Day"
+           f"&start={start}&end={end}&limit=10000&adjustment=all&feed=iex")
+    req = urllib.request.Request(url, headers={
+        "APCA-API-KEY-ID": key, "APCA-API-SECRET-KEY": secret,
+        "Accept": "application/json"})
+    with urllib.request.urlopen(req, timeout=60) as r:
+        data = json.loads(r.read())
+    bars = data.get("bars") or []
+    if not bars:
+        raise RuntimeError(f"Alpaca bars: {str(data)[:150]}")
+    df = pd.DataFrame(bars)
+    df["date"] = pd.to_datetime(df["t"]).dt.tz_localize(None)
+    df = df.set_index("date").rename(
+        columns={"o": "open", "h": "high", "l": "low", "c": "close", "v": "volume"})
+    return df[["open", "high", "low", "close", "volume"]].astype(float)
+
+
+def get_daily(symbol, polygon_key=None, days=730):
+    """Unified daily-candle loader: Alpaca first (same source as the charts and
+    orders), Polygon as fallback."""
+    try:
+        return alpaca_daily(symbol, days=days)
+    except Exception as e:
+        print(f"  {symbol}: Alpaca bars failed ({e}), falling back to Polygon")
+    if not polygon_key:
+        raise
+    end_d = pd.Timestamp.utcnow().date()
+    start_d = end_d - pd.Timedelta(days=days)
+    url = (f"https://api.polygon.io/v2/aggs/ticker/{symbol}/range/1/day/{start_d}/{end_d}"
+           f"?adjusted=true&sort=asc&limit=50000&apiKey={polygon_key}")
+    with urllib.request.urlopen(urllib.request.Request(
+            url, headers={"User-Agent": "Mozilla/5.0"}), timeout=60) as r:
+        data = json.loads(r.read())
+    results = data.get("results") or []
+    if not results:
+        raise RuntimeError(f"Polygon: {str(data)[:150]}")
+    df = pd.DataFrame(results)
+    df["date"] = pd.to_datetime(df["t"], unit="ms")
+    df = df.set_index("date").rename(
+        columns={"o": "open", "h": "high", "l": "low", "c": "close", "v": "volume"})
+    return df[["open", "high", "low", "close", "volume"]].astype(float)
+
+
 def engineer_features(df):
-    """Compute technical features. The final row has target=NaN (tomorrow unknown)
-    and is kept for live prediction; callers training a model must dropna on target."""
+    """Compute technical + candlestick features. The final row has target=NaN
+    (tomorrow unknown) and is kept for live prediction; callers training a
+    model must dropna on target."""
     out = df.copy()
     out["return_1d"] = out["close"].pct_change()
     out["return_5d"] = out["close"].pct_change(5)
@@ -60,6 +119,18 @@ def engineer_features(df):
     gain = delta.clip(lower=0).rolling(14).mean()
     loss = (-delta.clip(upper=0)).rolling(14).mean()
     out["rsi_14"] = 100 - (100 / (1 + gain / loss))
+    # --- Candlestick features: read the shape of each bar ---
+    out["body_pct"] = (out["close"] - out["open"]) / out["open"]           # candle body (direction + size)
+    out["upper_wick"] = (out["high"] - out[["open", "close"]].max(axis=1)) / out["open"]   # rejection above
+    out["lower_wick"] = (out[["open", "close"]].min(axis=1) - out["low"]) / out["open"]    # rejection below
+    out["hl_range"] = (out["high"] - out["low"]) / out["close"]            # intraday volatility
+    out["gap_pct"] = out["open"] / out["close"].shift() - 1                # overnight gap
+    # consecutive up-candles (down-candles count negative)
+    up = (out["close"] > out["open"]).astype(int)
+    down = (out["close"] < out["open"]).astype(int)
+    streak = up - down
+    out["up_streak"] = streak.groupby((streak != streak.shift()).cumsum()).cumsum()
+
     # Target: 1 if tomorrow closes higher than today (NaN for the latest day)
     next_close = out["close"].shift(-1)
     out["target"] = (next_close > out["close"]).where(next_close.notna()).astype("float")

@@ -7,6 +7,10 @@ rotates every ROTATE_EVERY_DAYS days. Currently-held positions are ALWAYS
 scanned too, so a holding is only sold when its own signal turns down - never
 just because it rotated out of view.
 
+Market data: ALPACA stock candles first (same source as the charts and the
+orders), Polygon as fallback. Models read candlestick features (body, wicks,
+range, gap, streak) plus classic technicals.
+
 Per run: load the persisted, continuously-retrained model per ticker when one
 is fresh and drift-free (see continuous_train.py); otherwise train inline and
 validate with WALK-FORWARD cross-validation (tickers that fail are skipped),
@@ -19,8 +23,8 @@ and a reward:risk take-profit. Positions older than MAX_HOLD_DAYS are closed
 KILL_SWITCH_DD vs the previous day's equity. Orders are only placed while the
 market is OPEN (Alpaca clock check) - off-hours orders are rejected (403).
 
-Market data: Polygon only. Keys from environment - NEVER hardcode secrets:
-  POLYGON_API_KEY     (Polygon.io - market data, 2y daily bars)
+Keys from environment - NEVER hardcode secrets:
+  POLYGON_API_KEY     (Polygon.io - fallback market data)
   ALPACA_API_KEY      (Alpaca paper key id)      -> dry-run if unset
   ALPACA_SECRET_KEY   (Alpaca paper secret)      -> dry-run if unset
   API_KEY             (NVIDIA - optional AI commentary)
@@ -125,23 +129,19 @@ def get_json(url):
 
 
 def polygon_daily(symbol, key):
+    """Load daily candles: Alpaca stock bars first (same source as the charts
+    and the orders), Polygon as fallback (paced for the free tier)."""
+    from stock_model import get_daily
+    try:
+        return get_daily(symbol, polygon_key=None)  # Alpaca, no pacing needed
+    except Exception as e:
+        print(f"  {symbol}: Alpaca candles unavailable ({e}); using Polygon")
     wait = POLYGON_MIN_INTERVAL - (time.time() - _last_polygon_call[0])
     if wait > 0:
         time.sleep(wait)
-    end = datetime.utcnow().date()
-    start = end - timedelta(days=730)
-    url = (f"https://api.polygon.io/v2/aggs/ticker/{symbol}/range/1/day/{start}/{end}"
-           f"?adjusted=true&sort=asc&limit=50000&apiKey={key}")
+    df = get_daily(symbol, polygon_key=key)
     _last_polygon_call[0] = time.time()
-    data = get_json(url)
-    results = data.get("results") or []
-    if not results:
-        raise RuntimeError(f"Polygon: {str(data)[:150]}")
-    df = pd.DataFrame(results)
-    df["date"] = pd.to_datetime(df["t"], unit="ms")
-    df = df.set_index("date").rename(
-        columns={"o": "open", "h": "high", "l": "low", "c": "close", "v": "volume"})
-    return df[["open", "high", "low", "close", "volume"]].astype(float)
+    return df
 
 
 def compute_atr(df, period=14):

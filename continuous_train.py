@@ -4,8 +4,8 @@ continuous_train.py - Continuous self-training layer for the stock models.
 Runs on every CI cycle (daily after close). For each ticker in the current
 universe it:
   1. INCREMENTALLY updates a persistent price cache (data/<SYM>.csv) with the
-     newest Polygon daily bars - the dataset grows forever, never re-downloads
-     the full history.
+     newest daily candles - Alpaca stock bars first (same source as the
+     charts and orders), Polygon fallback - the dataset grows forever.
   2. RETRAINS the direction model with walk-forward validation and persists it
      (models/<SYM>.joblib) so paper_trading.py can load a fresh, pre-validated
      model instead of training from scratch.
@@ -17,8 +17,9 @@ Reality check: no model reads markets flawlessly. This layer maximizes what is
 actually achievable: ever-growing data, frequent retraining, and hard metrics
 that tell you when the edge is gone.
 
-Env: POLYGON_API_KEY (required). Config: RETRAIN_DAYS (default 7),
-DRIFT_TOLERANCE (default 0.10), MIN_WF_ACCURACY (default 0.52).
+Env: POLYGON_API_KEY (required; Alpaca keys used when set). Config:
+RETRAIN_DAYS (default 7), DRIFT_TOLERANCE (default 0.10),
+MIN_WF_ACCURACY (default 0.52).
 """
 
 import json
@@ -76,26 +77,17 @@ def save_metrics(metrics):
 
 
 def polygon_daily(symbol, key, days=40):
-    """Fetch only the newest bars - the cache holds the long history."""
-    wait = POLYGON_MIN_INTERVAL - (time.time() - _last_call[0])
-    if wait > 0:
-        time.sleep(wait)
-    end = datetime.utcnow().date()
-    start = end - timedelta(days=days)
-    url = (f"https://api.polygon.io/v2/aggs/ticker/{symbol}/range/1/day/{start}/{end}"
-           f"?adjusted=true&sort=asc&limit=50000&apiKey={key}")
-    _last_call[0] = time.time()
-    req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0"})
-    with urllib.request.urlopen(req, timeout=60) as r:
-        data = json.loads(r.read())
-    results = data.get("results") or []
-    if not results:
-        raise RuntimeError(f"Polygon: {str(data)[:150]}")
-    df = pd.DataFrame(results)
-    df["date"] = pd.to_datetime(df["t"], unit="ms")
-    df = df.set_index("date").rename(
-        columns={"o": "open", "h": "high", "l": "low", "c": "close", "v": "volume"})
-    return df[["open", "high", "low", "close", "volume"]].astype(float)
+    """Fetch candles: Alpaca stock bars first, Polygon fallback (paced)."""
+    from stock_model import get_daily
+    try:
+        return get_daily(symbol, polygon_key=None, days=days)
+    except Exception:
+        wait = POLYGON_MIN_INTERVAL - (time.time() - _last_call[0])
+        if wait > 0:
+            time.sleep(wait)
+        df = get_daily(symbol, polygon_key=key, days=days)
+        _last_call[0] = time.time()
+        return df
 
 
 def update_cache(symbol, key):
