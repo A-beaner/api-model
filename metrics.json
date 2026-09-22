@@ -263,6 +263,17 @@
     "last_wf_acc": 0.5278,
     "tradable": true
   },
+  "SPY": {
+    "accuracy_history": [
+      {
+        "date": "2026-09-22",
+        "wf_acc": 0.4806
+      }
+    ],
+    "drift": false,
+    "last_wf_acc": 0.4806,
+    "tradable": false
+  },
   "TFC": {
     "accuracy_history": [
       {
@@ -272,6 +283,17 @@
     ],
     "drift": false,
     "last_wf_acc": 0.5194,
+    "tradable": false
+  },
+  "UNH": {
+    "accuracy_history": [
+      {
+        "date": "2026-09-22",
+        "wf_acc": 0.4667
+      }
+    ],
+    "drift": false,
+    "last_wf_acc": 0.4667,
     "tradable": false
   },
   "USB": {

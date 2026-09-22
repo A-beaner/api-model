@@ -1,0 +1,22 @@
+{
+  "generated_at": "2026-09-22T04:25:33.155301",
+  "conditions": {
+    "regime_filter": false,
+    "weekend_rule": false,
+    "confidence_sizing": true,
+    "cooldown": false,
+    "exposure_cap": false,
+    "correlation_guard": true,
+    "trailing_stop": true,
+    "breakeven_stop": false,
+    "partial_take_profit": false,
+    "earnings_blackout": false
+  },
+  "params": {
+    "max_deploy": 0.6,
+    "cooldown_days": 3,
+    "confidence_size_min": 0.5,
+    "confidence_size_max": 1.5,
+    "trail_percent": 1.5
+  }
+}
