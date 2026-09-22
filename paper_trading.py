@@ -20,14 +20,16 @@ stop distance (capped by an equal-weight slot budget and the daily trade
 limit). New buys are placed as Alpaca BRACKET orders with an ATR stop-loss
 and a reward:risk take-profit. Positions older than MAX_HOLD_DAYS are closed
 (time exit). A TRAILING-DIP PROFIT LOCK sells any holding that is >=
-DIP_EXIT_PCT off today's high while still above its entry. A KILL SWITCH
-halts all new trading if equity is down more than KILL_SWITCH_DD vs the
-previous day's equity. Orders are only placed while the market is OPEN.
+DIP_EXIT_PCT off today's high while still above its entry price. A KILL
+SWITCH halts all new trading if equity is down more than KILL_SWITCH_DD vs
+the previous day's equity. Orders are only placed while the market is OPEN
+(Alpaca clock check) - off-hours orders are rejected (403).
 
-STRATEGY GATE (strategy_gate.py / strategy_state.json): the model itself
-chooses, per ticker, whether the dip exit, cooldown, and confidence sizing
-conditions are active, and globally whether the SPY regime filter gates new
-buys - based on which conditions improved its own walk-forward backtests.
+Optional strategy conditions (regime filter, weekend rule, exposure cap,
+confidence sizing, cooldown) are toggled by strategy_config.json, written by
+strategy_lab.py after it measures each condition on out-of-sample data -
+the model chooses which conditions are active, and its decisions are archived
+in LEARNINGS.md.
 
 Keys from environment - NEVER hardcode secrets:
   POLYGON_API_KEY     (Polygon.io - fallback market data)
@@ -49,6 +51,7 @@ Config env vars:
   KILL_SWITCH_DD        (default 0.03)   - halt trading if daily drawdown exceeds this
   MIN_WF_ACCURACY       (default 0.52)   - min walk-forward accuracy to trade a ticker
   DIP_EXIT_PCT          (default 0.0125) - sell if this far off day high and above entry
+  STRATEGY_CONFIG_FILE  (default strategy_config.json) - model-chosen conditions
 """
 
 import csv
@@ -108,6 +111,29 @@ KILL_SWITCH_DD = float(os.environ.get("KILL_SWITCH_DD", "0.03"))
 MIN_WF_ACCURACY = float(os.environ.get("MIN_WF_ACCURACY", "0.52"))
 DIP_EXIT_PCT = float(os.environ.get("DIP_EXIT_PCT", "0.0125"))  # sell if 1.25% off day high and above entry
 WF_FOLDS = 3  # walk-forward validation folds
+
+STRATEGY_CONFIG_FILE = os.environ.get("STRATEGY_CONFIG_FILE", "strategy_config.json")
+
+
+def load_strategy_config():
+    """Model-chosen condition toggles written by strategy_lab.py.
+    Missing file -> conservative defaults (all optional conditions off)."""
+    defaults = {"conditions": {}, "params": {}}
+    if os.path.exists(STRATEGY_CONFIG_FILE):
+        try:
+            with open(STRATEGY_CONFIG_FILE) as f:
+                cfg = json.load(f)
+            print(f"Strategy config loaded ({STRATEGY_CONFIG_FILE}, "
+                  f"generated {cfg.get('generated_at', '?')}): {cfg.get('conditions')}")
+            return cfg
+        except Exception as e:
+            print(f"strategy_config.json unreadable ({e}); using defaults")
+    return defaults
+
+
+STRATEGY_CFG = load_strategy_config()
+COND = STRATEGY_CFG.get("conditions", {})
+PARAMS = STRATEGY_CFG.get("params", {})
 
 POLYGON_MIN_INTERVAL = 12.2  # free tier: 5 requests/min
 _last_polygon_call = [0.0]
@@ -243,6 +269,54 @@ def alpaca(method, path, key, secret, body=None):
         return json.loads(raw) if raw else {}
 
 
+def regime_ok(poly_key):
+    """Regime filter (if enabled): only buy when SPY trades above its SMA-50."""
+    if not COND.get("regime_filter"):
+        return True
+    try:
+        from stock_model import get_daily
+        spy = get_daily("SPY", polygon_key=poly_key, days=120)
+        ok = float(spy["close"].iloc[-1]) > float(spy["close"].rolling(50).mean().iloc[-1])
+        print(f"Regime filter: SPY {'>' if ok else '<='} SMA-50 -> buys {'allowed' if ok else 'BLOCKED'}")
+        return ok
+    except Exception as e:
+        print(f"  regime check failed ({e}); allowing buys")
+        return True
+
+
+def weekend_ok():
+    """Weekend rule (if enabled): no new buys on Fridays."""
+    if not COND.get("weekend_rule"):
+        return True
+    ok = datetime.utcnow().weekday() != 4
+    if not ok:
+        print("Weekend rule: Friday -> new buys BLOCKED")
+    return ok
+
+
+def cooldown_blocked(symbol):
+    """Cooldown (if enabled): skip re-buying a symbol sold within the last
+    cooldown_days according to the track record."""
+    if not COND.get("cooldown"):
+        return False
+    days = int(PARAMS.get("cooldown_days", 3))
+    try:
+        if not os.path.exists(TRACK_RECORD_FILE):
+            return False
+        with open(TRACK_RECORD_FILE) as f:
+            rows = list(csv.DictReader(f))[-30:]
+        for r in reversed(rows):
+            if symbol in (r.get("actions") or "") and "SELL" in r["actions"]:
+                sold_at = datetime.strptime(r["date_utc"], "%Y-%m-%d %H:%M")
+                if (datetime.utcnow() - sold_at).days < days:
+                    print(f"  {symbol}: cooldown active (sold {r['date_utc']}) - buy blocked")
+                    return True
+                return False
+    except Exception:
+        pass
+    return False
+
+
 def dip_exit_triggered(symbol, entry_price, poly_key, threshold=DIP_EXIT_PCT):
     """Trailing-dip profit lock: True if today's price is `threshold`+ below
     today's high (peak) AND still above the entry price. Uses Alpaca candles."""
@@ -266,24 +340,6 @@ def market_is_open(key, secret):
     except Exception as e:
         print(f"  market clock check failed: {e}")
         return False, None, None
-
-
-def gate_state():
-    """Load the model-chosen strategy conditions (written by strategy_gate.py)."""
-    try:
-        from strategy_gate import load_state
-        return load_state()
-    except Exception:
-        return {}
-
-
-def cond_enabled(state, sym, cond, default=True):
-    """Is a condition enabled for this ticker? Default applies when the gate
-    has no opinion yet (e.g. first runs)."""
-    entry = state.get(sym, {})
-    if "enabled_conditions" not in entry:
-        return default
-    return cond in entry["enabled_conditions"]
 
 
 def holding_days(symbol, key, secret):
@@ -411,12 +467,8 @@ def main():
         pass  # trading blocked this run; skip to logging
     elif not dry_run:
         # 0) TRAILING-DIP PROFIT LOCK: sell if >=DIP_EXIT_PCT off today's high
-        #    and still above entry - locks gains before they round-trip.
-        #    (Skipped per-ticker if the strategy gate disabled it.)
-        state = gate_state()
+        #    and still above entry - locks gains before they round-trip
         for sym, qty in held.items():
-            if not cond_enabled(state, sym, "dip_exit", default=True):
-                continue  # backtests found the dip exit hurts this ticker
             triggered, dip, price, peak = dip_exit_triggered(
                 sym, entry_px.get(sym, float("inf")), poly_key)
             if triggered:
@@ -442,17 +494,6 @@ def main():
                 except Exception as e:
                     actions.append(f"TIME-EXIT SELL {qty} {sym} FAILED: {e}")
 
-        # record exits so the cooldown condition can block quick re-entry
-        for a in actions:
-            if (a.startswith(("SELL", "DIP-EXIT", "TIME-EXIT")) and "FAILED" not in a):
-                sym_done = a.split()[2] if a.startswith(("DIP-EXIT", "TIME-EXIT")) else a.split()[1]
-                state.setdefault(sym_done, {})["last_exit"] = datetime.utcnow().strftime("%Y-%m-%d")
-        try:
-            from strategy_gate import save_state
-            save_state(state)
-        except Exception:
-            pass
-
         # 2) Sell positions that are no longer picks (and not just exited)
         exited = {a.split()[2] for a in actions
                   if (a.startswith("TIME-EXIT SELL") or a.startswith("DIP-EXIT SELL"))
@@ -468,35 +509,28 @@ def main():
                     actions.append(f"SELL {qty} {sym} FAILED: {e}")
 
         # 3) Buy new picks: risk-based size, BRACKET order with ATR stop + TP
-        daily_budget = min(equity * 0.95, DAILY_TRADE_LIMIT_USD)
+        buys_allowed = regime_ok(poly_key) and weekend_ok()
+        if not buys_allowed:
+            actions.append("BUYS BLOCKED by strategy config (regime/weekend)")
+        invested = sum(int(q) * float(entry_px.get(s, 0)) for s, q in held.items())
+        max_deploy = float(PARAMS.get("max_deploy", 0.95)) if COND.get("exposure_cap") else 0.95
+        daily_budget = min(equity * max_deploy - invested, equity * 0.95, DAILY_TRADE_LIMIT_USD)
+        daily_budget = max(daily_budget, 0.0)
         slot_budget = daily_budget / TOP_N
         print(f"Daily trade limit: ${DAILY_TRADE_LIMIT_USD:,.0f} -> slot budget ${slot_budget:,.2f}")
-        # REGIME FILTER: if the gate enabled it, only buy with SPY above its 50d SMA
-        regime_ok = True
-        if state.get("_global", {}).get("regime_filter"):
-            try:
-                spy = polygon_daily("SPY", poly_key)
-                regime_ok = bool(spy["close"].iloc[-1] > spy["close"].rolling(50).mean().iloc[-1])
-                print(f"Regime filter ON: SPY {'above' if regime_ok else 'BELOW'} 50d SMA")
-            except Exception as e:
-                print(f"Regime check failed ({e}); allowing buys")
-        for pick in picks:
+        for pick in picks if buys_allowed else []:
             sym = pick["symbol"]
             if sym in held:
                 continue
-            if not regime_ok:
-                actions.append(f"BUY {sym} skipped (regime filter: SPY below 50d SMA)")
-                continue
-            # COOLDOWN: skip re-entry within 5 days of an exit, if the gate enabled it
-            last_exit = state.get(sym, {}).get("last_exit")
-            if (cond_enabled(state, sym, "cooldown", default=False) and last_exit and
-                    (datetime.utcnow() - datetime.strptime(last_exit, "%Y-%m-%d")).days < 5):
-                actions.append(f"BUY {sym} skipped (cooldown until 5d after {last_exit})")
+            if cooldown_blocked(sym):
+                actions.append(f"BUY {sym} skipped (cooldown)")
                 continue
             qty = risk_based_qty(equity, pick["price"], pick["atr"], slot_budget)
-            # CONFIDENCE SIZING: scale size by signal strength if the gate enabled it
-            if cond_enabled(state, sym, "confidence_sizing", default=False):
-                qty = int(qty * (1.0 + 2.0 * (pick["p_up"] - 0.5)))
+            if COND.get("confidence_sizing"):
+                lo = float(PARAMS.get("confidence_size_min", 0.5))
+                hi = float(PARAMS.get("confidence_size_max", 1.5))
+                mult = min(max((pick["p_up"] - 0.5) * 2, lo), hi)
+                qty = int(qty * mult)
             if qty < 1:
                 actions.append(f"BUY {sym} skipped (risk/size constraints)")
                 continue

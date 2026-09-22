@@ -8,8 +8,8 @@ on:
       - 'models/**'
       - 'metrics.json'
       - 'track_record.csv'
-      - 'LEARNING.md'
-      - 'strategy_state.json'
+      - 'strategy_config.json'
+      - 'LEARNINGS.md'
   workflow_dispatch:
   schedule:
     - cron: "30 19 * * 1-5"  # weekdays 19:30 UTC = 3:30pm ET, market still open
@@ -50,7 +50,7 @@ jobs:
           STOCK_API_KEY: ${{ secrets.STOCK_API_KEY }}
         run: python stock_model.py
 
-      - name: Continuous training + strategy gate + learning archive
+      - name: Continuous training (cache data, retrain, drift check)
         env:
           POLYGON_API_KEY: ${{ secrets.POLYGON_API_KEY }}
           ALPACA_API_KEY: ${{ secrets.ALPACA_API_KEY }}
@@ -58,6 +58,9 @@ jobs:
           WINDOW_SIZE: "30"
           ROTATE_EVERY_DAYS: "7"
         run: python continuous_train.py
+
+      - name: Strategy lab (model chooses its own conditions)
+        run: python strategy_lab.py
 
       - name: Paper trade portfolio (live on Alpaca paper, rotating universe)
         env:
@@ -70,14 +73,14 @@ jobs:
           TOP_N: "3"
         run: python paper_trading.py
 
-      - name: Commit track record + training artifacts
+      - name: Commit track record + training artifacts + learnings
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add track_record.csv metrics.json LEARNING.md strategy_state.json data/ models/ 2>/dev/null || true
+          git add track_record.csv metrics.json strategy_config.json LEARNINGS.md data/ models/ 2>/dev/null || true
           if git diff --cached --quiet; then
             echo "no changes"
           else
-            git commit -m "chore: daily training + track record $(date -u +'%F %H:%M UTC')"
+            git commit -m "chore: daily training, strategy lab + track record $(date -u +'%F %H:%M UTC')"
             git push
           fi
