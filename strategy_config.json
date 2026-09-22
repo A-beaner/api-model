@@ -1,11 +1,11 @@
 {
   "generated_at": "2026-09-22T22:22:54.768244",
   "conditions": {
-    "regime_filter": false,
+    "regime_filter": true,
     "weekend_rule": false,
     "confidence_sizing": true,
-    "cooldown": false,
-    "exposure_cap": false,
+    "cooldown": true,
+    "exposure_cap": true,
     "correlation_guard": true,
     "trailing_stop": true,
     "breakeven_stop": false,
@@ -18,5 +18,6 @@
     "confidence_size_min": 0.5,
     "confidence_size_max": 1.5,
     "trail_percent": 1.5
-  }
+  },
+  "manual_override_note": "Enabled regime_filter, exposure_cap, cooldown after churn/403-loss review (2026-09-22). strategy_lab.py may re-toggle on new evidence."
 }
