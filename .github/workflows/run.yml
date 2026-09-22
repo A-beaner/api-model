@@ -10,7 +10,7 @@ on:
       - 'track_record.csv'
   workflow_dispatch:
   schedule:
-    - cron: "0 22 * * 1-5"  # weekdays 22:00 UTC, after US market close
+    - cron: "30 19 * * 1-5"  # weekdays 19:30 UTC = 3:30pm ET, market still open
 
 permissions:
   contents: write  # allows the commit steps

@@ -16,7 +16,8 @@ stop distance (capped by an equal-weight slot budget and the daily trade
 limit). New buys are placed as Alpaca BRACKET orders with an ATR stop-loss
 and a reward:risk take-profit. Positions older than MAX_HOLD_DAYS are closed
 (time exit). A KILL SWITCH halts all new trading if equity is down more than
-KILL_SWITCH_DD vs the previous day's equity.
+KILL_SWITCH_DD vs the previous day's equity. Orders are only placed while the
+market is OPEN (Alpaca clock check) - off-hours orders are rejected (403).
 
 Market data: Polygon only. Keys from environment - NEVER hardcode secrets:
   POLYGON_API_KEY     (Polygon.io - market data, 2y daily bars)
@@ -234,6 +235,16 @@ def alpaca(method, path, key, secret, body=None):
         return json.loads(raw) if raw else {}
 
 
+def market_is_open(key, secret):
+    """Check Alpaca's market clock - returns (is_open, next_open, next_close)."""
+    try:
+        c = alpaca("GET", "/v2/clock", key, secret)
+        return bool(c.get("is_open")), c.get("next_open"), c.get("next_close")
+    except Exception as e:
+        print(f"  market clock check failed: {e}")
+        return False, None, None
+
+
 def holding_days(symbol, key, secret):
     """Days since the most recent filled BUY for `symbol` (for time exits).
     Returns None if unknown."""
@@ -347,6 +358,15 @@ def main():
     elif halted:
         actions.append("HALTED: kill switch active, no orders placed")
     else:
+        open_now, nxt_open, nxt_close = market_is_open(alpaca_key, alpaca_secret)
+        if not open_now:
+            # Orders placed while the market is closed are rejected (HTTP 403).
+            # CI targets 19:30 UTC (3:30pm ET) so this should rarely trigger.
+            actions.append(f"SKIPPED: market closed (next open {nxt_open})")
+            print(actions[-1])
+    if actions and actions[-1].startswith(("HALTED", "SKIPPED")):
+        pass  # trading blocked this run; skip to logging
+    elif not dry_run:
         # 1) TIME EXITS: close positions held longer than MAX_HOLD_DAYS
         for sym, qty in held.items():
             days = holding_days(sym, alpaca_key, alpaca_secret)
