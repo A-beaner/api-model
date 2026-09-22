@@ -19,7 +19,9 @@ each new position risks at most RISK_PER_TRADE of equity, sized from its ATR
 stop distance (capped by an equal-weight slot budget and the daily trade
 limit). New buys are placed as Alpaca BRACKET orders with an ATR stop-loss
 and a reward:risk take-profit. Positions older than MAX_HOLD_DAYS are closed
-(time exit). A KILL SWITCH halts all new trading if equity is down more than
+(time exit). A TRAILING-DIP PROFIT LOCK sells any holding that is >=
+DIP_EXIT_PCT (default 1.25%) off today's high while still above its entry
+price. A KILL SWITCH halts all new trading if equity is down more than
 KILL_SWITCH_DD vs the previous day's equity. Orders are only placed while the
 market is OPEN (Alpaca clock check) - off-hours orders are rejected (403).
 
@@ -42,6 +44,7 @@ Config env vars:
   MAX_HOLD_DAYS         (default 20)     - time exit: close positions older than this
   KILL_SWITCH_DD        (default 0.03)   - halt trading if daily drawdown exceeds this
   MIN_WF_ACCURACY       (default 0.52)   - min walk-forward accuracy to trade a ticker
+  DIP_EXIT_PCT          (default 0.0125) - sell if this far off day high and above entry
 """
 
 import csv
@@ -99,6 +102,7 @@ TP_RR = float(os.environ.get("TP_RR", "2.0"))
 MAX_HOLD_DAYS = int(os.environ.get("MAX_HOLD_DAYS", "20"))
 KILL_SWITCH_DD = float(os.environ.get("KILL_SWITCH_DD", "0.03"))
 MIN_WF_ACCURACY = float(os.environ.get("MIN_WF_ACCURACY", "0.52"))
+DIP_EXIT_PCT = float(os.environ.get("DIP_EXIT_PCT", "0.0125"))  # sell if 1.25% off day high and above entry
 WF_FOLDS = 3  # walk-forward validation folds
 
 POLYGON_MIN_INTERVAL = 12.2  # free tier: 5 requests/min
@@ -235,6 +239,21 @@ def alpaca(method, path, key, secret, body=None):
         return json.loads(raw) if raw else {}
 
 
+def dip_exit_triggered(symbol, entry_price, poly_key, threshold=DIP_EXIT_PCT):
+    """Trailing-dip profit lock: True if today's price is `threshold`+ below
+    today's high (peak) AND still above the entry price. Uses Alpaca candles."""
+    try:
+        from stock_model import get_daily
+        df = get_daily(symbol, polygon_key=poly_key, days=5)
+        day_high = float(df["high"].iloc[-1])
+        price = float(df["close"].iloc[-1])
+        dip = (day_high - price) / day_high if day_high else 0.0
+        return dip >= threshold and price > entry_price, dip, price, day_high
+    except Exception as e:
+        print(f"  dip check {symbol} failed: {e}")
+        return False, 0.0, 0.0, 0.0
+
+
 def market_is_open(key, secret):
     """Check Alpaca's market clock - returns (is_open, next_open, next_close)."""
     try:
@@ -310,9 +329,10 @@ def main():
     print(f"Universe: {universe_desc} | scanning {len(universe)} tickers | top {TOP_N}")
     print(f"Risk: {RISK_PER_TRADE:.1%}/trade, stop={STOP_ATR_MULT}xATR, TP={TP_RR}R, "
           f"max hold {MAX_HOLD_DAYS}d, kill switch -{KILL_SWITCH_DD:.0%}/day, "
-          f"min walk-forward acc {MIN_WF_ACCURACY:.2f}")
+          f"min walk-forward acc {MIN_WF_ACCURACY:.2f}, dip exit {DIP_EXIT_PCT:.2%}")
 
     held = {}
+    entry_px = {}
     equity = 0.0
     halted = False
     if not dry_run:
@@ -321,6 +341,7 @@ def main():
         last_equity = float(acct.get("last_equity") or equity)
         positions = alpaca("GET", "/v2/positions", alpaca_key, alpaca_secret)
         held = {p["symbol"]: int(float(p["qty"])) for p in positions}
+        entry_px = {p["symbol"]: float(p["avg_entry_price"]) for p in positions}
         extras = [s for s in held if s not in universe]
         if extras:
             universe = universe + extras
@@ -367,6 +388,22 @@ def main():
     if actions and actions[-1].startswith(("HALTED", "SKIPPED")):
         pass  # trading blocked this run; skip to logging
     elif not dry_run:
+        # 0) TRAILING-DIP PROFIT LOCK: sell if >=DIP_EXIT_PCT off today's high
+        #    and still above entry - locks gains before they round-trip
+        for sym, qty in held.items():
+            triggered, dip, price, peak = dip_exit_triggered(
+                sym, entry_px.get(sym, float("inf")), poly_key)
+            if triggered:
+                try:
+                    o = alpaca("POST", "/v2/orders", alpaca_key, alpaca_secret,
+                               {"symbol": sym, "qty": str(qty), "side": "sell",
+                                "type": "market", "time_in_force": "day"})
+                    actions.append(f"DIP-EXIT SELL {qty} {sym} (peak ${peak:,.2f}, "
+                                   f"-{dip:.1%} off high, above entry ${entry_px.get(sym, 0):,.2f}) "
+                                   f"-> {o.get('status')}")
+                except Exception as e:
+                    actions.append(f"DIP-EXIT SELL {qty} {sym} FAILED: {e}")
+
         # 1) TIME EXITS: close positions held longer than MAX_HOLD_DAYS
         for sym, qty in held.items():
             days = holding_days(sym, alpaca_key, alpaca_secret)
@@ -379,8 +416,10 @@ def main():
                 except Exception as e:
                     actions.append(f"TIME-EXIT SELL {qty} {sym} FAILED: {e}")
 
-        # 2) Sell positions that are no longer picks (and not just time-exited)
-        exited = {a.split()[2] for a in actions if a.startswith("TIME-EXIT SELL") and "FAILED" not in a}
+        # 2) Sell positions that are no longer picks (and not just exited)
+        exited = {a.split()[2] for a in actions
+                  if (a.startswith("TIME-EXIT SELL") or a.startswith("DIP-EXIT SELL"))
+                  and "FAILED" not in a}
         for sym, qty in held.items():
             if sym not in target and sym not in exited:
                 try:
