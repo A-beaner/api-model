@@ -289,6 +289,37 @@ def alpaca(method, path, key, secret, body=None, retries=3):
     raise last_err
 
 
+
+def sell_with_pnl(sym, qty, key, secret, entry_price, label="SELL"):
+    """Market-sell `qty` of `sym`, wait briefly for the fill, and return an
+    action string that includes the fill price and realized P&L vs entry.
+    Makes 'sold at a loss?' answerable directly from the track record."""
+    o = alpaca("POST", "/v2/orders", key, secret,
+               {"symbol": sym, "qty": str(qty), "side": "sell",
+                "type": "market", "time_in_force": "day"})
+    fill_px = None
+    oid = o.get("id")
+    if oid:
+        for _ in range(6):  # poll up to ~30s for the fill
+            time.sleep(5)
+            try:
+                st = alpaca("GET", f"/v2/orders/{oid}", key, secret)
+            except Exception:
+                break
+            if st.get("status") == "filled":
+                fill_px = float(st.get("filled_avg_price") or 0) or None
+                break
+            if st.get("status") in ("canceled", "expired", "rejected"):
+                return f"{label} {qty} {sym} -> {st.get('status')} (no fill)"
+    if fill_px is not None and entry_price:
+        pnl = (fill_px - entry_price) * qty
+        pct = (fill_px / entry_price - 1) if entry_price else 0.0
+        return (f"{label} {qty} {sym} @ ${fill_px:,.2f} (entry ${entry_price:,.2f}, "
+                f"P&L {'+' if pnl >= 0 else ''}${pnl:,.2f} / {pct:+.2%}) -> filled")
+    if fill_px is not None:
+        return f"{label} {qty} {sym} @ ${fill_px:,.2f} (entry unknown) -> filled"
+    return f"{label} {qty} {sym} -> {o.get('status')} (fill price pending)"
+
 def regime_ok(poly_key):
     """Regime filter (if enabled): only buy when SPY trades above its SMA-50."""
     if not COND.get("regime_filter"):
@@ -493,12 +524,9 @@ def main():
                 sym, entry_px.get(sym, float("inf")), poly_key)
             if triggered:
                 try:
-                    o = alpaca("POST", "/v2/orders", alpaca_key, alpaca_secret,
-                               {"symbol": sym, "qty": str(qty), "side": "sell",
-                                "type": "market", "time_in_force": "day"})
-                    actions.append(f"DIP-EXIT SELL {qty} {sym} (peak ${peak:,.2f}, "
-                                   f"-{dip:.1%} off high, above entry ${entry_px.get(sym, 0):,.2f}) "
-                                   f"-> {o.get('status')}")
+                    actions.append(sell_with_pnl(sym, qty, alpaca_key, alpaca_secret,
+                                                 entry_px.get(sym), label="DIP-EXIT SELL")
+                                   + f" (peak ${peak:,.2f}, -{dip:.1%} off high)")
                 except Exception as e:
                     actions.append(f"DIP-EXIT SELL {qty} {sym} FAILED: {e}")
 
@@ -507,17 +535,22 @@ def main():
             days = holding_days(sym, alpaca_key, alpaca_secret)
             if days is not None and days >= MAX_HOLD_DAYS:
                 try:
-                    o = alpaca("POST", "/v2/orders", alpaca_key, alpaca_secret,
-                               {"symbol": sym, "qty": str(qty), "side": "sell",
-                                "type": "market", "time_in_force": "day"})
-                    actions.append(f"TIME-EXIT SELL {qty} {sym} (held {days}d) -> {o.get('status')}")
+                    actions.append(sell_with_pnl(sym, qty, alpaca_key, alpaca_secret,
+                                                 entry_px.get(sym), label="TIME-EXIT SELL")
+                                   + f" (held {days}d)")
                 except Exception as e:
                     actions.append(f"TIME-EXIT SELL {qty} {sym} FAILED: {e}")
 
         # 2) Sell positions that are no longer picks (and not just exited)
-        exited = {a.split()[2] for a in actions
-                  if (a.startswith("TIME-EXIT SELL") or a.startswith("DIP-EXIT SELL"))
-                  and "FAILED" not in a}
+        exited = set()
+        for a in actions:
+            if "FAILED" in a or "no fill" in a:
+                continue
+            parts = a.split()
+            if a.startswith("SELL"):
+                exited.add(parts[2])
+            elif a.startswith(("TIME-EXIT SELL", "DIP-EXIT SELL")):
+                exited.add(parts[3])
         for sym, qty in held.items():
             if sym not in target and sym not in exited:
                 days_held = holding_days(sym, alpaca_key, alpaca_secret)
@@ -525,10 +558,8 @@ def main():
                     actions.append(f"HOLD {qty} {sym} (held {days_held}d < min {MIN_HOLD_DAYS}d - avoiding churn)")
                     continue
                 try:
-                    o = alpaca("POST", "/v2/orders", alpaca_key, alpaca_secret,
-                               {"symbol": sym, "qty": str(qty), "side": "sell",
-                                "type": "market", "time_in_force": "day"})
-                    actions.append(f"SELL {qty} {sym} -> {o.get('status')}")
+                    actions.append(sell_with_pnl(sym, qty, alpaca_key, alpaca_secret,
+                                                 entry_px.get(sym)))
                 except Exception as e:
                     actions.append(f"SELL {qty} {sym} FAILED: {e}")
 
