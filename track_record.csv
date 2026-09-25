@@ -15,3 +15,4 @@ date_utc,mode,universe,scanned,picks,actions,holdings,equity
 2026-09-23 22:27,paper,"rotating window (pool=168, period=2959)",30,USB:0.66|GS:0.62,SKIPPED: market closed (next open 2026-09-24T09:30:00-04:00),BLK:15|MS:82,98309.50
 2026-09-24 03:53,paper,"rotating window (pool=168, period=2960)",30,USB:0.66|GS:0.62,SKIPPED: market closed (next open 2026-09-24T09:30:00-04:00),BLK:15|MS:82,98312.97
 2026-09-24 12:28,paper,"rotating window (pool=168, period=2960)",30,USB:0.66|MRK:0.63|GS:0.62,SKIPPED: market closed (next open 2026-09-24T09:30:00-04:00),BLK:15|MS:82,98272.13
+2026-09-25 22:38,paper,"rotating window (pool=168, period=2960)",30,MA:0.61|GS:0.56,SKIPPED: market closed (next open 2026-09-28T09:30:00-04:00),BLK:15|MS:82,98511.22
