@@ -26,11 +26,15 @@
       {
         "date": "2026-09-22",
         "wf_acc": 0.5167
+      },
+      {
+        "date": "2026-09-30",
+        "wf_acc": 0.5344
       }
     ],
     "drift": false,
-    "last_wf_acc": 0.5167,
-    "tradable": false
+    "last_wf_acc": 0.5344,
+    "tradable": true
   },
   "AMGN": {
     "accuracy_history": [
@@ -48,10 +52,14 @@
       {
         "date": "2026-09-22",
         "wf_acc": 0.4917
+      },
+      {
+        "date": "2026-09-30",
+        "wf_acc": 0.4793
       }
     ],
     "drift": false,
-    "last_wf_acc": 0.4917,
+    "last_wf_acc": 0.4793,
     "tradable": false
   },
   "BAC": {
@@ -59,21 +67,29 @@
       {
         "date": "2026-09-22",
         "wf_acc": 0.5194
+      },
+      {
+        "date": "2026-09-30",
+        "wf_acc": 0.5344
       }
     ],
     "drift": false,
-    "last_wf_acc": 0.5194,
-    "tradable": false
+    "last_wf_acc": 0.5344,
+    "tradable": true
   },
   "BLK": {
     "accuracy_history": [
       {
         "date": "2026-09-22",
         "wf_acc": 0.4889
+      },
+      {
+        "date": "2026-09-30",
+        "wf_acc": 0.4793
       }
     ],
     "drift": false,
-    "last_wf_acc": 0.4889,
+    "last_wf_acc": 0.4793,
     "tradable": false
   },
   "C": {
@@ -81,10 +97,14 @@
       {
         "date": "2026-09-22",
         "wf_acc": 0.5
+      },
+      {
+        "date": "2026-09-30",
+        "wf_acc": 0.5069
       }
     ],
     "drift": false,
-    "last_wf_acc": 0.5,
+    "last_wf_acc": 0.5069,
     "tradable": false
   },
   "CDNS": {
@@ -103,10 +123,14 @@
       {
         "date": "2026-09-22",
         "wf_acc": 0.4889
+      },
+      {
+        "date": "2026-09-30",
+        "wf_acc": 0.4793
       }
     ],
     "drift": false,
-    "last_wf_acc": 0.4889,
+    "last_wf_acc": 0.4793,
     "tradable": false
   },
   "COF": {
@@ -114,10 +138,14 @@
       {
         "date": "2026-09-22",
         "wf_acc": 0.5167
+      },
+      {
+        "date": "2026-09-30",
+        "wf_acc": 0.4959
       }
     ],
     "drift": false,
-    "last_wf_acc": 0.5167,
+    "last_wf_acc": 0.4959,
     "tradable": false
   },
   "COIN": {
@@ -180,10 +208,14 @@
       {
         "date": "2026-09-22",
         "wf_acc": 0.5694
+      },
+      {
+        "date": "2026-09-30",
+        "wf_acc": 0.5647
       }
     ],
     "drift": false,
-    "last_wf_acc": 0.5694,
+    "last_wf_acc": 0.5647,
     "tradable": true
   },
   "JNJ": {
@@ -224,21 +256,29 @@
       {
         "date": "2026-09-22",
         "wf_acc": 0.5361
+      },
+      {
+        "date": "2026-09-30",
+        "wf_acc": 0.5041
       }
     ],
     "drift": false,
-    "last_wf_acc": 0.5361,
-    "tradable": true
+    "last_wf_acc": 0.5041,
+    "tradable": false
   },
   "MET": {
     "accuracy_history": [
       {
         "date": "2026-09-22",
         "wf_acc": 0.4972
+      },
+      {
+        "date": "2026-09-30",
+        "wf_acc": 0.5096
       }
     ],
     "drift": false,
-    "last_wf_acc": 0.4972,
+    "last_wf_acc": 0.5096,
     "tradable": false
   },
   "MRK": {
@@ -257,10 +297,14 @@
       {
         "date": "2026-09-22",
         "wf_acc": 0.5056
+      },
+      {
+        "date": "2026-09-30",
+        "wf_acc": 0.5152
       }
     ],
     "drift": false,
-    "last_wf_acc": 0.5056,
+    "last_wf_acc": 0.5152,
     "tradable": false
   },
   "NET": {
@@ -312,21 +356,29 @@
       {
         "date": "2026-09-22",
         "wf_acc": 0.5056
+      },
+      {
+        "date": "2026-09-30",
+        "wf_acc": 0.5262
       }
     ],
     "drift": false,
-    "last_wf_acc": 0.5056,
-    "tradable": false
+    "last_wf_acc": 0.5262,
+    "tradable": true
   },
   "PRU": {
     "accuracy_history": [
       {
         "date": "2026-09-22",
         "wf_acc": 0.4917
+      },
+      {
+        "date": "2026-09-30",
+        "wf_acc": 0.4931
       }
     ],
     "drift": false,
-    "last_wf_acc": 0.4917,
+    "last_wf_acc": 0.4931,
     "tradable": false
   },
   "SCHW": {
@@ -334,10 +386,14 @@
       {
         "date": "2026-09-22",
         "wf_acc": 0.4889
+      },
+      {
+        "date": "2026-09-30",
+        "wf_acc": 0.4986
       }
     ],
     "drift": false,
-    "last_wf_acc": 0.4889,
+    "last_wf_acc": 0.4986,
     "tradable": false
   },
   "SHOP": {
@@ -367,10 +423,14 @@
       {
         "date": "2026-09-22",
         "wf_acc": 0.4806
+      },
+      {
+        "date": "2026-09-30",
+        "wf_acc": 0.5069
       }
     ],
     "drift": false,
-    "last_wf_acc": 0.4806,
+    "last_wf_acc": 0.5069,
     "tradable": false
   },
   "TFC": {
@@ -378,11 +438,15 @@
       {
         "date": "2026-09-22",
         "wf_acc": 0.5194
+      },
+      {
+        "date": "2026-09-30",
+        "wf_acc": 0.5207
       }
     ],
     "drift": false,
-    "last_wf_acc": 0.5194,
-    "tradable": false
+    "last_wf_acc": 0.5207,
+    "tradable": true
   },
   "TMO": {
     "accuracy_history": [
@@ -400,10 +464,14 @@
       {
         "date": "2026-09-22",
         "wf_acc": 0.4667
+      },
+      {
+        "date": "2026-09-30",
+        "wf_acc": 0.4573
       }
     ],
     "drift": false,
-    "last_wf_acc": 0.4667,
+    "last_wf_acc": 0.4573,
     "tradable": false
   },
   "USB": {
@@ -411,21 +479,29 @@
       {
         "date": "2026-09-22",
         "wf_acc": 0.5417
+      },
+      {
+        "date": "2026-09-30",
+        "wf_acc": 0.5179
       }
     ],
     "drift": false,
-    "last_wf_acc": 0.5417,
-    "tradable": true
+    "last_wf_acc": 0.5179,
+    "tradable": false
   },
   "V": {
     "accuracy_history": [
       {
         "date": "2026-09-22",
         "wf_acc": 0.5111
+      },
+      {
+        "date": "2026-09-30",
+        "wf_acc": 0.4904
       }
     ],
     "drift": false,
-    "last_wf_acc": 0.5111,
+    "last_wf_acc": 0.4904,
     "tradable": false
   },
   "WFC": {
@@ -433,10 +509,14 @@
       {
         "date": "2026-09-22",
         "wf_acc": 0.5028
+      },
+      {
+        "date": "2026-09-30",
+        "wf_acc": 0.5179
       }
     ],
     "drift": false,
-    "last_wf_acc": 0.5028,
+    "last_wf_acc": 0.5179,
     "tradable": false
   }
 }
