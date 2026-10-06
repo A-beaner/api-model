@@ -1,10 +1,10 @@
 {
-  "generated_at": "2026-10-02T23:09:54.464801",
+  "generated_at": "2026-10-06T00:54:59.782099",
   "conditions": {
     "regime_filter": false,
     "weekend_rule": false,
     "confidence_sizing": true,
-    "cooldown": false,
+    "cooldown": true,
     "exposure_cap": false,
     "correlation_guard": true,
     "trailing_stop": true,

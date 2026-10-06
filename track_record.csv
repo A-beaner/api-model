@@ -20,3 +20,4 @@ date_utc,mode,universe,scanned,picks,actions,holdings,equity
 2026-09-30 17:41,paper,"rotating window (pool=168, period=2960)",31,,"SELL 1 BLK @ $1,062.95 (entry $1,082.00, P&L $-19.05 / -1.76%) -> filled|HOLD 300 COIN (held 0d < min 3d - avoiding churn)|SELL 82 MS @ $189.21 (entry $206.35, P&L $-1,405.75 / -8.31%) -> filled",BLK:1|COIN:300|MS:82,97648.73
 2026-09-30 23:08,paper,"rotating window (pool=168, period=2960)",31,GS:0.57,SKIPPED: market closed (next open 2026-10-01T09:30:00-04:00),COIN:300,97499.92
 2026-10-02 23:10,paper,"rotating window (pool=168, period=2961)",31,,SKIPPED: market closed (next open 2026-10-05T09:30:00-04:00),COIN:300,96476.56
+2026-10-06 00:55,paper,"rotating window (pool=168, period=2961)",31,,SKIPPED: market closed (next open 2026-10-06T09:30:00-04:00),COIN:300,97997.56
