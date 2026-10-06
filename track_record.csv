@@ -21,3 +21,4 @@ date_utc,mode,universe,scanned,picks,actions,holdings,equity
 2026-09-30 23:08,paper,"rotating window (pool=168, period=2960)",31,GS:0.57,SKIPPED: market closed (next open 2026-10-01T09:30:00-04:00),COIN:300,97499.92
 2026-10-02 23:10,paper,"rotating window (pool=168, period=2961)",31,,SKIPPED: market closed (next open 2026-10-05T09:30:00-04:00),COIN:300,96476.56
 2026-10-06 00:55,paper,"rotating window (pool=168, period=2961)",31,,SKIPPED: market closed (next open 2026-10-06T09:30:00-04:00),COIN:300,97997.56
+2026-10-06 23:12,paper,"rotating window (pool=168, period=2961)",31,,SKIPPED: market closed (next open 2026-10-07T09:30:00-04:00),COIN:300,97472.56
