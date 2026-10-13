@@ -8,10 +8,14 @@
       {
         "date": "2026-10-02",
         "wf_acc": 0.5219
+      },
+      {
+        "date": "2026-10-13",
+        "wf_acc": 0.5203
       }
     ],
     "drift": false,
-    "last_wf_acc": 0.5219,
+    "last_wf_acc": 0.5203,
     "tradable": true
   },
   "ABT": {
@@ -23,10 +27,14 @@
       {
         "date": "2026-10-02",
         "wf_acc": 0.5109
+      },
+      {
+        "date": "2026-10-13",
+        "wf_acc": 0.5149
       }
     ],
     "drift": false,
-    "last_wf_acc": 0.5109,
+    "last_wf_acc": 0.5149,
     "tradable": false
   },
   "AIG": {
@@ -53,10 +61,14 @@
       {
         "date": "2026-10-02",
         "wf_acc": 0.5055
+      },
+      {
+        "date": "2026-10-13",
+        "wf_acc": 0.5014
       }
     ],
     "drift": false,
-    "last_wf_acc": 0.5055,
+    "last_wf_acc": 0.5014,
     "tradable": false
   },
   "AXP": {
@@ -94,10 +106,14 @@
       {
         "date": "2026-10-02",
         "wf_acc": 0.5167
+      },
+      {
+        "date": "2026-10-13",
+        "wf_acc": 0.4891
       }
     ],
     "drift": false,
-    "last_wf_acc": 0.5167,
+    "last_wf_acc": 0.4891,
     "tradable": false
   },
   "BLK": {
@@ -120,11 +136,15 @@
       {
         "date": "2026-10-02",
         "wf_acc": 0.5139
+      },
+      {
+        "date": "2026-10-13",
+        "wf_acc": 0.5328
       }
     ],
     "drift": false,
-    "last_wf_acc": 0.5139,
-    "tradable": false
+    "last_wf_acc": 0.5328,
+    "tradable": true
   },
   "C": {
     "accuracy_history": [
@@ -157,10 +177,14 @@
       {
         "date": "2026-10-02",
         "wf_acc": 0.4639
+      },
+      {
+        "date": "2026-10-13",
+        "wf_acc": 0.4891
       }
     ],
     "drift": false,
-    "last_wf_acc": 0.4639,
+    "last_wf_acc": 0.4891,
     "tradable": false
   },
   "CME": {
@@ -257,10 +281,14 @@
       {
         "date": "2026-10-02",
         "wf_acc": 0.4672
+      },
+      {
+        "date": "2026-10-13",
+        "wf_acc": 0.4743
       }
     ],
     "drift": false,
-    "last_wf_acc": 0.4672,
+    "last_wf_acc": 0.4743,
     "tradable": false
   },
   "EOG": {
@@ -283,10 +311,14 @@
       {
         "date": "2026-10-02",
         "wf_acc": 0.5082
+      },
+      {
+        "date": "2026-10-13",
+        "wf_acc": 0.5068
       }
     ],
     "drift": false,
-    "last_wf_acc": 0.5082,
+    "last_wf_acc": 0.5068,
     "tradable": false
   },
   "GS": {
@@ -320,10 +352,14 @@
       {
         "date": "2026-10-02",
         "wf_acc": 0.4778
+      },
+      {
+        "date": "2026-10-13",
+        "wf_acc": 0.5109
       }
     ],
     "drift": false,
-    "last_wf_acc": 0.4778,
+    "last_wf_acc": 0.5109,
     "tradable": false
   },
   "JNJ": {
@@ -335,10 +371,14 @@
       {
         "date": "2026-10-02",
         "wf_acc": 0.5027
+      },
+      {
+        "date": "2026-10-13",
+        "wf_acc": 0.5014
       }
     ],
     "drift": false,
-    "last_wf_acc": 0.5027,
+    "last_wf_acc": 0.5014,
     "tradable": false
   },
   "JPM": {
@@ -372,11 +412,15 @@
       {
         "date": "2026-10-02",
         "wf_acc": 0.5137
+      },
+      {
+        "date": "2026-10-13",
+        "wf_acc": 0.5203
       }
     ],
     "drift": false,
-    "last_wf_acc": 0.5137,
-    "tradable": false
+    "last_wf_acc": 0.5203,
+    "tradable": true
   },
   "MA": {
     "accuracy_history": [
@@ -398,10 +442,14 @@
       {
         "date": "2026-10-02",
         "wf_acc": 0.4917
+      },
+      {
+        "date": "2026-10-13",
+        "wf_acc": 0.4945
       }
     ],
     "drift": false,
-    "last_wf_acc": 0.4917,
+    "last_wf_acc": 0.4945,
     "tradable": false
   },
   "MET": {
@@ -439,10 +487,14 @@
       {
         "date": "2026-10-02",
         "wf_acc": 0.5355
+      },
+      {
+        "date": "2026-10-13",
+        "wf_acc": 0.5501
       }
     ],
     "drift": false,
-    "last_wf_acc": 0.5355,
+    "last_wf_acc": 0.5501,
     "tradable": true
   },
   "MS": {
@@ -513,10 +565,14 @@
       {
         "date": "2026-10-02",
         "wf_acc": 0.5082
+      },
+      {
+        "date": "2026-10-13",
+        "wf_acc": 0.5068
       }
     ],
     "drift": false,
-    "last_wf_acc": 0.5082,
+    "last_wf_acc": 0.5068,
     "tradable": false
   },
   "PNC": {
@@ -565,11 +621,15 @@
       {
         "date": "2026-10-02",
         "wf_acc": 0.5083
+      },
+      {
+        "date": "2026-10-13",
+        "wf_acc": 0.5219
       }
     ],
     "drift": false,
-    "last_wf_acc": 0.5083,
-    "tradable": false
+    "last_wf_acc": 0.5219,
+    "tradable": true
   },
   "SCHW": {
     "accuracy_history": [
@@ -643,11 +703,15 @@
       {
         "date": "2026-10-02",
         "wf_acc": 0.5111
+      },
+      {
+        "date": "2026-10-13",
+        "wf_acc": 0.5301
       }
     ],
     "drift": false,
-    "last_wf_acc": 0.5111,
-    "tradable": false
+    "last_wf_acc": 0.5301,
+    "tradable": true
   },
   "TFC": {
     "accuracy_history": [
@@ -673,10 +737,14 @@
       {
         "date": "2026-10-02",
         "wf_acc": 0.4699
+      },
+      {
+        "date": "2026-10-13",
+        "wf_acc": 0.4607
       }
     ],
     "drift": false,
-    "last_wf_acc": 0.4699,
+    "last_wf_acc": 0.4607,
     "tradable": false
   },
   "UNH": {
@@ -740,10 +808,14 @@
       {
         "date": "2026-10-02",
         "wf_acc": 0.5444
+      },
+      {
+        "date": "2026-10-13",
+        "wf_acc": 0.5628
       }
     ],
     "drift": false,
-    "last_wf_acc": 0.5444,
+    "last_wf_acc": 0.5628,
     "tradable": true
   },
   "WFC": {
@@ -766,10 +838,14 @@
       {
         "date": "2026-10-02",
         "wf_acc": 0.4833
+      },
+      {
+        "date": "2026-10-13",
+        "wf_acc": 0.5055
       }
     ],
     "drift": false,
-    "last_wf_acc": 0.4833,
+    "last_wf_acc": 0.5055,
     "tradable": false
   },
   "ZTS": {
@@ -777,10 +853,14 @@
       {
         "date": "2026-10-02",
         "wf_acc": 0.5111
+      },
+      {
+        "date": "2026-10-13",
+        "wf_acc": 0.5191
       }
     ],
     "drift": false,
-    "last_wf_acc": 0.5111,
+    "last_wf_acc": 0.5191,
     "tradable": false
   }
 }
