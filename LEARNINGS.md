@@ -283,3 +283,18 @@ Evaluated 60 tickers, 3561 out-of-sample signals.
 - **breakeven_stop**: OFF - `{"reason": "exit-side condition; set by risk policy, will A/B when trade count > 100"}`
 - **partial_take_profit**: OFF - `{"reason": "exit-side condition; set by risk policy, will A/B when trade count > 100"}`
 - **earnings_blackout**: OFF - `{"reason": "undetermined - needs earnings calendar feed"}`
+
+## 2026-10-14 22:28 UTC
+
+Evaluated 60 tickers, 3573 out-of-sample signals.
+
+- **regime_filter**: OFF - `{"fwd_above_sma50": 0.00196, "fwd_below_sma50": 0.00231}`
+- **weekend_rule**: OFF - `{"fwd_friday": 0.00265, "fwd_non_friday": 0.00197}`
+- **exposure_cap**: OFF - `{"reason": "edge sufficient"}`
+- **confidence_sizing**: ENABLED - `{"p_up_vs_fwd_corr": 0.0249}`
+- **cooldown**: OFF - `{"fwd_after_down_day": 0.00228, "fwd_after_up_day": 0.00192}`
+- **correlation_guard**: ENABLED - `{"reason": "always-on structural guard"}`
+- **trailing_stop**: ENABLED - `{"reason": "exit-side condition; set by risk policy, will A/B when trade count > 100"}`
+- **breakeven_stop**: OFF - `{"reason": "exit-side condition; set by risk policy, will A/B when trade count > 100"}`
+- **partial_take_profit**: OFF - `{"reason": "exit-side condition; set by risk policy, will A/B when trade count > 100"}`
+- **earnings_blackout**: OFF - `{"reason": "undetermined - needs earnings calendar feed"}`
