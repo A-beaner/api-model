@@ -291,13 +291,20 @@ def alpaca(method, path, key, secret, body=None, retries=3):
 
 
 
-def sell_with_pnl(sym, qty, key, secret, entry_price, label="SELL"):
+def sell_with_pnl(sym, qty, key, secret, entry_price, label="SELL", tif="day"):
     """Market-sell `qty` of `sym`, wait briefly for the fill, and return an
     action string that includes the fill price and realized P&L vs entry.
-    Makes 'sold at a loss?' answerable directly from the track record."""
+    Makes 'sold at a loss?' answerable directly from the track record.
+    tif='opg' queues a market-on-open sell when the market is closed:
+    the exit still happens at the next session instead of being skipped."""
     o = alpaca("POST", "/v2/orders", key, secret,
                {"symbol": sym, "qty": str(qty), "side": "sell",
-                "type": "market", "time_in_force": "day"})
+                "type": "market", "time_in_force": tif})
+    if tif == "opg":
+        return (f"{label} {qty} {sym} QUEUED market-on-open "
+                f"(entry ${entry_price:,.2f}) -> {o.get('status')}"
+                if entry_price else
+                f"{label} {qty} {sym} QUEUED market-on-open -> {o.get('status')}")
     fill_px = None
     oid = o.get("id")
     if oid:
@@ -508,16 +515,18 @@ def main():
         print(actions[0])
     elif halted:
         actions.append("HALTED: kill switch active, no orders placed")
-    else:
+    queue_mode = False  # market closed -> queue exits as market-on-open
+    if not dry_run and not halted:
         open_now, nxt_open, nxt_close = market_is_open(alpaca_key, alpaca_secret)
         if not open_now:
-            # Orders placed while the market is closed are rejected (HTTP 403).
-            # CI targets 19:30 UTC (3:30pm ET) so this should rarely trigger.
-            actions.append(f"SKIPPED: market closed (next open {nxt_open})")
+            queue_mode = True
+            actions.append(f"AFTER-HOURS: market closed (next open {nxt_open}) - "
+                           f"evaluating exits and queueing sells as market-on-open; no new buys")
             print(actions[-1])
-    if actions and actions[-1].startswith(("HALTED", "SKIPPED")):
-        pass  # trading blocked this run; skip to logging
+    if halted:
+        pass  # kill switch: nothing at all
     elif not dry_run:
+        SELL_TIF = "opg" if queue_mode else "day"
         # 0) TRAILING-DIP PROFIT LOCK: sell if >=DIP_EXIT_PCT off today's high
         #    and still above entry - locks gains before they round-trip
         for sym, qty in held.items():
@@ -526,7 +535,8 @@ def main():
             if triggered:
                 try:
                     actions.append(sell_with_pnl(sym, qty, alpaca_key, alpaca_secret,
-                                                 entry_px.get(sym), label="DIP-EXIT SELL")
+                                                 entry_px.get(sym), label="DIP-EXIT SELL",
+                                                 tif=SELL_TIF)
                                    + f" (peak ${peak:,.2f}, -{dip:.1%} off high)")
                 except Exception as e:
                     actions.append(f"DIP-EXIT SELL {qty} {sym} FAILED: {e}")
@@ -537,7 +547,8 @@ def main():
             if days is not None and days >= MAX_HOLD_DAYS:
                 try:
                     actions.append(sell_with_pnl(sym, qty, alpaca_key, alpaca_secret,
-                                                 entry_px.get(sym), label="TIME-EXIT SELL")
+                                                 entry_px.get(sym), label="TIME-EXIT SELL",
+                                                 tif=SELL_TIF)
                                    + f" (held {days}d)")
                 except Exception as e:
                     actions.append(f"TIME-EXIT SELL {qty} {sym} FAILED: {e}")
@@ -547,6 +558,10 @@ def main():
         for a in actions:
             if "FAILED" in a or "no fill" in a:
                 continue
+            if "QUEUED market-on-open" in a:  # sell intent queued; don't double-sell
+                parts = a.split()
+                idx = 3 if a.startswith(("TIME-EXIT SELL", "DIP-EXIT SELL")) else 2
+                exited.add(parts[idx])
             parts = a.split()
             if a.startswith("SELL"):
                 exited.add(parts[2])
@@ -560,13 +575,15 @@ def main():
                     continue
                 try:
                     actions.append(sell_with_pnl(sym, qty, alpaca_key, alpaca_secret,
-                                                 entry_px.get(sym)))
+                                                 entry_px.get(sym), tif=SELL_TIF))
                 except Exception as e:
                     actions.append(f"SELL {qty} {sym} FAILED: {e}")
 
         # 3) Buy new picks: risk-based size, BRACKET order with ATR stop + TP
         failed_sells = [a for a in actions if "SELL" in a and "FAILED" in a]
-        buys_allowed = regime_ok(poly_key) and weekend_ok()
+        buys_allowed = regime_ok(poly_key) and weekend_ok() and not queue_mode
+        if queue_mode:
+            actions.append("BUYS BLOCKED: market closed - bracket orders need a live session")
         if failed_sells:
             buys_allowed = False
             actions.append(f"BUYS BLOCKED: {len(failed_sells)} SELL(s) failed - "
