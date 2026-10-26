@@ -248,10 +248,14 @@
       {
         "date": "2026-10-16",
         "wf_acc": 0.5111
+      },
+      {
+        "date": "2026-10-26",
+        "wf_acc": 0.5027
       }
     ],
     "drift": false,
-    "last_wf_acc": 0.5111,
+    "last_wf_acc": 0.5027,
     "tradable": false
   },
   "CRWD": {
@@ -401,10 +405,14 @@
       {
         "date": "2026-10-16",
         "wf_acc": 0.4917
+      },
+      {
+        "date": "2026-10-26",
+        "wf_acc": 0.4809
       }
     ],
     "drift": false,
-    "last_wf_acc": 0.4917,
+    "last_wf_acc": 0.4809,
     "tradable": false
   },
   "ISRG": {
@@ -472,10 +480,14 @@
       {
         "date": "2026-10-16",
         "wf_acc": 0.4806
+      },
+      {
+        "date": "2026-10-26",
+        "wf_acc": 0.4973
       }
     ],
     "drift": false,
-    "last_wf_acc": 0.4806,
+    "last_wf_acc": 0.4973,
     "tradable": false
   },
   "LLY": {
@@ -539,11 +551,15 @@
       {
         "date": "2026-10-16",
         "wf_acc": 0.5278
+      },
+      {
+        "date": "2026-10-26",
+        "wf_acc": 0.5164
       }
     ],
     "drift": false,
-    "last_wf_acc": 0.5278,
-    "tradable": true
+    "last_wf_acc": 0.5164,
+    "tradable": false
   },
   "MDT": {
     "accuracy_history": [
@@ -651,10 +667,14 @@
       {
         "date": "2026-10-16",
         "wf_acc": 0.5722
+      },
+      {
+        "date": "2026-10-26",
+        "wf_acc": 0.5683
       }
     ],
     "drift": false,
-    "last_wf_acc": 0.5722,
+    "last_wf_acc": 0.5683,
     "tradable": true
   },
   "NOW": {
@@ -699,10 +719,14 @@
       {
         "date": "2026-10-16",
         "wf_acc": 0.5472
+      },
+      {
+        "date": "2026-10-26",
+        "wf_acc": 0.5656
       }
     ],
     "drift": false,
-    "last_wf_acc": 0.5472,
+    "last_wf_acc": 0.5656,
     "tradable": true
   },
   "PFE": {
@@ -729,10 +753,14 @@
       {
         "date": "2026-10-16",
         "wf_acc": 0.4861
+      },
+      {
+        "date": "2026-10-26",
+        "wf_acc": 0.5055
       }
     ],
     "drift": false,
-    "last_wf_acc": 0.4861,
+    "last_wf_acc": 0.5055,
     "tradable": false
   },
   "PM": {
@@ -740,10 +768,14 @@
       {
         "date": "2026-10-16",
         "wf_acc": 0.525
+      },
+      {
+        "date": "2026-10-26",
+        "wf_acc": 0.5219
       }
     ],
     "drift": false,
-    "last_wf_acc": 0.525,
+    "last_wf_acc": 0.5219,
     "tradable": true
   },
   "PNC": {
@@ -1069,21 +1101,29 @@
       {
         "date": "2026-10-16",
         "wf_acc": 0.5278
+      },
+      {
+        "date": "2026-10-26",
+        "wf_acc": 0.5109
       }
     ],
     "drift": false,
-    "last_wf_acc": 0.5278,
-    "tradable": true
+    "last_wf_acc": 0.5109,
+    "tradable": false
   },
   "WMT": {
     "accuracy_history": [
       {
         "date": "2026-10-16",
         "wf_acc": 0.4889
+      },
+      {
+        "date": "2026-10-26",
+        "wf_acc": 0.5027
       }
     ],
     "drift": false,
-    "last_wf_acc": 0.4889,
+    "last_wf_acc": 0.5027,
     "tradable": false
   },
   "XOM": {
