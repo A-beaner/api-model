@@ -161,6 +161,17 @@
     "last_wf_acc": 0.5069,
     "tradable": false
   },
+  "CAT": {
+    "accuracy_history": [
+      {
+        "date": "2026-10-30",
+        "wf_acc": 0.5361
+      }
+    ],
+    "drift": false,
+    "last_wf_acc": 0.5361,
+    "tradable": true
+  },
   "CDNS": {
     "accuracy_history": [
       {
@@ -187,6 +198,17 @@
     "last_wf_acc": 0.4891,
     "tradable": false
   },
+  "CL": {
+    "accuracy_history": [
+      {
+        "date": "2026-10-30",
+        "wf_acc": 0.4889
+      }
+    ],
+    "drift": false,
+    "last_wf_acc": 0.4889,
+    "tradable": false
+  },
   "CME": {
     "accuracy_history": [
       {
@@ -200,6 +222,17 @@
     ],
     "drift": false,
     "last_wf_acc": 0.4793,
+    "tradable": false
+  },
+  "CMG": {
+    "accuracy_history": [
+      {
+        "date": "2026-10-30",
+        "wf_acc": 0.5111
+      }
+    ],
+    "drift": false,
+    "last_wf_acc": 0.5111,
     "tradable": false
   },
   "COF": {
@@ -295,16 +328,31 @@
     "last_wf_acc": 0.4528,
     "tradable": false
   },
-  "DG": {
+  "DE": {
     "accuracy_history": [
       {
-        "date": "2026-10-22",
+        "date": "2026-10-30",
         "wf_acc": 0.5083
       }
     ],
     "drift": false,
     "last_wf_acc": 0.5083,
     "tradable": false
+  },
+  "DG": {
+    "accuracy_history": [
+      {
+        "date": "2026-10-22",
+        "wf_acc": 0.5083
+      },
+      {
+        "date": "2026-10-30",
+        "wf_acc": 0.5328
+      }
+    ],
+    "drift": false,
+    "last_wf_acc": 0.5328,
+    "tradable": true
   },
   "DHR": {
     "accuracy_history": [
@@ -330,10 +378,25 @@
       {
         "date": "2026-10-22",
         "wf_acc": 0.5167
+      },
+      {
+        "date": "2026-10-30",
+        "wf_acc": 0.5355
       }
     ],
     "drift": false,
-    "last_wf_acc": 0.5167,
+    "last_wf_acc": 0.5355,
+    "tradable": true
+  },
+  "EL": {
+    "accuracy_history": [
+      {
+        "date": "2026-10-30",
+        "wf_acc": 0.5139
+      }
+    ],
+    "drift": false,
+    "last_wf_acc": 0.5139,
     "tradable": false
   },
   "EOG": {
@@ -350,6 +413,17 @@
     "drift": false,
     "last_wf_acc": 0.5164,
     "tradable": false
+  },
+  "GE": {
+    "accuracy_history": [
+      {
+        "date": "2026-10-30",
+        "wf_acc": 0.525
+      }
+    ],
+    "drift": false,
+    "last_wf_acc": 0.525,
+    "tradable": true
   },
   "GILD": {
     "accuracy_history": [
@@ -414,6 +488,17 @@
     "drift": false,
     "last_wf_acc": 0.4809,
     "tradable": false
+  },
+  "HON": {
+    "accuracy_history": [
+      {
+        "date": "2026-10-30",
+        "wf_acc": 0.5222
+      }
+    ],
+    "drift": false,
+    "last_wf_acc": 0.5222,
+    "tradable": true
   },
   "ISRG": {
     "accuracy_history": [
@@ -509,15 +594,30 @@
     "last_wf_acc": 0.5203,
     "tradable": true
   },
+  "LMT": {
+    "accuracy_history": [
+      {
+        "date": "2026-10-30",
+        "wf_acc": 0.4722
+      }
+    ],
+    "drift": false,
+    "last_wf_acc": 0.4722,
+    "tradable": false
+  },
   "LOW": {
     "accuracy_history": [
       {
         "date": "2026-10-22",
         "wf_acc": 0.4611
+      },
+      {
+        "date": "2026-10-30",
+        "wf_acc": 0.4672
       }
     ],
     "drift": false,
-    "last_wf_acc": 0.4611,
+    "last_wf_acc": 0.4672,
     "tradable": false
   },
   "LULU": {
@@ -525,11 +625,15 @@
       {
         "date": "2026-10-22",
         "wf_acc": 0.5278
+      },
+      {
+        "date": "2026-10-30",
+        "wf_acc": 0.5191
       }
     ],
     "drift": false,
-    "last_wf_acc": 0.5278,
-    "tradable": true
+    "last_wf_acc": 0.5191,
+    "tradable": false
   },
   "MA": {
     "accuracy_history": [
@@ -596,11 +700,15 @@
       {
         "date": "2026-10-22",
         "wf_acc": 0.5083
+      },
+      {
+        "date": "2026-10-30",
+        "wf_acc": 0.5301
       }
     ],
     "drift": false,
-    "last_wf_acc": 0.5083,
-    "tradable": false
+    "last_wf_acc": 0.5301,
+    "tradable": true
   },
   "MPC": {
     "accuracy_history": [
@@ -843,10 +951,25 @@
       {
         "date": "2026-10-22",
         "wf_acc": 0.5417
+      },
+      {
+        "date": "2026-10-30",
+        "wf_acc": 0.5137
       }
     ],
     "drift": false,
-    "last_wf_acc": 0.5417,
+    "last_wf_acc": 0.5137,
+    "tradable": false
+  },
+  "RTX": {
+    "accuracy_history": [
+      {
+        "date": "2026-10-30",
+        "wf_acc": 0.5528
+      }
+    ],
+    "drift": false,
+    "last_wf_acc": 0.5528,
     "tradable": true
   },
   "SBUX": {
@@ -854,10 +977,14 @@
       {
         "date": "2026-10-22",
         "wf_acc": 0.4583
+      },
+      {
+        "date": "2026-10-30",
+        "wf_acc": 0.4536
       }
     ],
     "drift": false,
-    "last_wf_acc": 0.4583,
+    "last_wf_acc": 0.4536,
     "tradable": false
   },
   "SCHW": {
@@ -929,10 +1056,14 @@
       {
         "date": "2026-10-22",
         "wf_acc": 0.5093
+      },
+      {
+        "date": "2026-10-30",
+        "wf_acc": 0.5144
       }
     ],
     "drift": false,
-    "last_wf_acc": 0.5093,
+    "last_wf_acc": 0.5144,
     "tradable": false
   },
   "SYK": {
@@ -970,10 +1101,14 @@
       {
         "date": "2026-10-22",
         "wf_acc": 0.4528
+      },
+      {
+        "date": "2026-10-30",
+        "wf_acc": 0.4563
       }
     ],
     "drift": false,
-    "last_wf_acc": 0.4528,
+    "last_wf_acc": 0.4563,
     "tradable": false
   },
   "TJX": {
@@ -981,10 +1116,14 @@
       {
         "date": "2026-10-22",
         "wf_acc": 0.4556
+      },
+      {
+        "date": "2026-10-30",
+        "wf_acc": 0.4235
       }
     ],
     "drift": false,
-    "last_wf_acc": 0.4556,
+    "last_wf_acc": 0.4235,
     "tradable": false
   },
   "TMO": {
@@ -1019,6 +1158,17 @@
     ],
     "drift": false,
     "last_wf_acc": 0.4573,
+    "tradable": false
+  },
+  "UPS": {
+    "accuracy_history": [
+      {
+        "date": "2026-10-30",
+        "wf_acc": 0.4944
+      }
+    ],
+    "drift": false,
+    "last_wf_acc": 0.4944,
     "tradable": false
   },
   "USB": {
@@ -1146,10 +1296,14 @@
       {
         "date": "2026-10-22",
         "wf_acc": 0.5361
+      },
+      {
+        "date": "2026-10-30",
+        "wf_acc": 0.5437
       }
     ],
     "drift": false,
-    "last_wf_acc": 0.5361,
+    "last_wf_acc": 0.5437,
     "tradable": true
   },
   "ZTS": {
