@@ -1,8 +1,8 @@
 {
-  "generated_at": "2026-11-03T01:46:42.405320",
+  "generated_at": "2026-11-04T00:06:51.753545",
   "conditions": {
     "regime_filter": false,
-    "weekend_rule": true,
+    "weekend_rule": false,
     "confidence_sizing": true,
     "cooldown": false,
     "exposure_cap": false,
